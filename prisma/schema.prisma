@@ -1,0 +1,77 @@
+// PedreirosBR — banco do organismo
+// Postgres (Coolify). DNA da Fase 2 (leads pagos) já nasce aqui.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Território: cidade ou bairro. Páginas nascem quando os contadores cruzam o limiar.
+model Territory {
+  id         String   @id @default(cuid())
+  tipo       String   // "cidade" | "bairro"
+  slug       String   @unique // ex.: "osasco-sp" ou "osasco-sp/jardim-rosa"
+  nome       String
+  uf         String
+  ibge       String?
+  // contadores do organismo (atualizados a cada evento)
+  calculos   Int      @default(0)
+  buscas     Int      @default(0)
+  leads      Int      @default(0)
+  orcamentos Int      @default(0)
+  // estado da página no organismo
+  paginaAtiva  Boolean @default(false) // nasce true só após limiar de substância
+  assinaturaAtiva Boolean @default(false) // fase 2: organismo passou a oferecer assinatura
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([uf, tipo])
+}
+
+/// Log imutável de eventos — matéria-prima do flywheel de dados.
+model TerritoryEvent {
+  id          String   @id @default(cuid())
+  territorySlug String
+  tipo        String   // "calculo" | "busca" | "lead" | "orcamento_pdf" | "avaliacao"
+  servico     String?  // slug da calculadora
+  meta        Json?
+  createdAt   DateTime @default(now())
+
+  @@index([territorySlug, createdAt])
+  @@index([tipo, createdAt])
+}
+
+/// Lead capturado (cliente que precisa de obra). Geolocalizado desde o dia 1.
+model Lead {
+  id          String   @id @default(cuid())
+  servico     String
+  descricao   String?
+  territorySlug String
+  whatsapp    String
+  origem      String   // "calculadora" | "orcamento_pdf" | "pagina_cidade"
+  resultado   Json?    // snapshot do cálculo que originou o lead
+  distribuido Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([territorySlug, createdAt])
+}
+
+/// Profissional — base de oferta (fase 2). Nasce vazia, preenche pelos loops 5.1/5.2/5.3.
+model Professional {
+  id          String   @id @default(cuid())
+  nome        String
+  whatsapp    String   @unique
+  slug        String?  @unique // página pública futura: /joao-osasco
+  territorySlug String
+  oficio      String   @default("pedreiro")
+  origem      String?  // "ferramenta" | "avaliacao_cliente" | "claim"
+  status      String   @default("capturado") // "capturado" | "pagina_ativa" | "assinante"
+  avaliacaoMedia Float?
+  avaliacoes   Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
