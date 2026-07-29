@@ -29,5 +29,5 @@ COPY --from=builder /app/package.json ./package.json
 USER nextjs
 EXPOSE 3000
 
-# Aplica migrations e sobe o servidor standalone
-CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
+# Aplica migrations e sobe o servidor standalone (CLI prisma chamada direto — sem .bin/npx)
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node server.js"]
