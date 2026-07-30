@@ -1,7 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Archivo, Inter } from "next/font/google";
 import "./globals.css";
 import { getOficioAtivo, SITE_URL } from "../oficios";
+
+const archivo = Archivo({
+  subsets: ["latin"],
+  variable: "--font-archivo",
+  weight: ["500", "700", "800", "900"],
+  display: "swap",
+});
+
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+});
 
 const oficio = getOficioAtivo();
 
@@ -20,7 +34,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const adsenseClient = process.env.NEXT_PUBLIC_ADSENSE_CLIENT;
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" className={`${archivo.variable} ${inter.variable}`}>
       <head>
         {adsenseClient && (
           <script
@@ -30,35 +44,66 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           />
         )}
       </head>
-      <body className="min-h-screen bg-amber-50 text-neutral-900 antialiased">
-        <header className="border-b border-orange-200 bg-white">
-          <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
-            <Link href="/" className="text-xl font-extrabold text-orange-700">
-              {oficio.nomePlural}BR<span className="text-neutral-400">.com.br</span>
-            </Link>
-            <nav className="flex items-center gap-4 text-sm font-medium text-neutral-700">
-              <Link href="/calculadoras" className="hover:text-orange-700">Calculadoras</Link>
-              <Link href="/quanto-cobrar" className="hover:text-orange-700">Para pedreiros</Link>
-              <Link
-                href="/orcamento"
-                className="rounded-lg bg-orange-700 px-3 py-1.5 text-white hover:bg-orange-800"
-              >
-                Orçamento em PDF
+      <body className="min-h-screen antialiased">
+        <div className="relative z-10">
+          <header className="sticky top-0 z-50 border-b border-ink/10 bg-paper/90 backdrop-blur">
+            <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+              <Link href="/" className="font-display text-xl font-black tracking-tight text-ink">
+                PEDREIROS<span className="text-accent">BR</span>
+                <span className="ml-1 align-middle text-xs font-medium text-ink-soft">.com.br</span>
               </Link>
-            </nav>
-          </div>
-        </header>
-        <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
-        <footer className="mt-16 border-t border-orange-200 bg-white">
-          <div className="mx-auto max-w-5xl px-4 py-8 text-sm text-neutral-500">
-            <p className="font-semibold text-neutral-700">{oficio.nomePlural}BR — ferramentas grátis para quem constrói e para quem reforma.</p>
-            <p className="mt-2">
-              Estimativas baseadas em referências públicas regionais (CUB/Sinduscon) e padrões de consumo de obra.
-              Valores reais variam conforme profissional, acesso e condições do local.
-            </p>
-            <p className="mt-4">© {new Date().getFullYear()} {oficio.dominio}</p>
-          </div>
-        </footer>
+              <nav className="flex items-center gap-1 text-sm font-medium sm:gap-2">
+                <Link href="/calculadoras" className="rounded-lg px-3 py-2 text-ink-soft transition hover:bg-accent-soft hover:text-accent-dark">
+                  Calculadoras
+                </Link>
+                <Link href="/quanto-cobrar" className="hidden rounded-lg px-3 py-2 text-ink-soft transition hover:bg-accent-soft hover:text-accent-dark sm:block">
+                  Para pedreiros
+                </Link>
+                <Link
+                  href="/orcamento"
+                  className="rounded-lg bg-ink px-4 py-2 font-semibold text-paper transition hover:bg-accent-dark"
+                >
+                  Orçamento em PDF
+                </Link>
+              </nav>
+            </div>
+          </header>
+
+          <main className="mx-auto max-w-6xl px-4">{children}</main>
+
+          <footer className="mt-24 border-t border-ink/10 bg-paper-deep">
+            <div className="mx-auto max-w-6xl px-4 py-12">
+              <div className="grid gap-8 sm:grid-cols-3">
+                <div>
+                  <p className="font-display text-lg font-black text-ink">
+                    PEDREIROS<span className="text-accent">BR</span>
+                  </p>
+                  <p className="mt-2 text-sm text-ink-soft">
+                    Ferramentas grátis para quem constrói e para quem reforma.
+                  </p>
+                </div>
+                <div className="text-sm">
+                  <p className="font-semibold text-ink">Ferramentas</p>
+                  <ul className="mt-2 space-y-1.5 text-ink-soft">
+                    <li><Link href="/calculadoras" className="hover:text-accent">Calculadoras de obra</Link></li>
+                    <li><Link href="/orcamento" className="hover:text-accent">Gerador de orçamento PDF</Link></li>
+                    <li><Link href="/quanto-cobrar" className="hover:text-accent">Quanto cobrar em 2026</Link></li>
+                  </ul>
+                </div>
+                <div className="text-sm">
+                  <p className="font-semibold text-ink">Transparência</p>
+                  <p className="mt-2 text-ink-soft">
+                    Estimativas baseadas em referências públicas regionais (CUB/Sinduscon) e padrões
+                    de consumo de obra. Valores reais variam por profissional e local.
+                  </p>
+                </div>
+              </div>
+              <p className="mt-10 border-t border-ink/10 pt-6 text-xs text-ink-soft">
+                © {new Date().getFullYear()} {oficio.dominio} — feito no Brasil 🇧🇷
+              </p>
+            </div>
+          </footer>
+        </div>
       </body>
     </html>
   );

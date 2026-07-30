@@ -51,51 +51,51 @@ export function WhatsappCapture({ servico, territorio, resumo, resultadoSnapshot
 
   if (enviado) {
     return (
-      <div className="mt-4 rounded-xl border border-green-300 bg-green-50 p-4 text-green-900">
-        <p className="font-semibold">Pronto! 🎉</p>
-        <p className="mt-1 text-sm">
+      <div className="mt-5 rounded-xl border-2 border-green-600/30 bg-green-50 p-5">
+        <p className="font-display text-lg font-bold text-green-800">Pronto! 🎉</p>
+        <p className="mt-1 text-sm text-green-800/80">
           Vamos te mandar no WhatsApp o resultado detalhado com a lista de materiais
-          {querOrcamentos ? " e avisar quando tivermos profissionais na sua região." : "."}
+          {querOrcamentos ? " e avisar quando tivermos pedreiros na sua região." : "."}
         </p>
       </div>
     );
   }
 
   return (
-    <div className="mt-5 rounded-xl bg-white p-4 shadow-sm">
-      <p className="font-semibold text-neutral-800">Receba o resultado completo no WhatsApp</p>
-      <p className="mt-1 text-sm text-neutral-500">
+    <div className="mt-6 rounded-2xl bg-ink p-5 text-paper sm:p-6">
+      <p className="font-display text-lg font-bold">Receba o resultado completo no WhatsApp</p>
+      <p className="mt-1 text-sm text-paper/70">
         Lista de materiais detalhada, quantidades e faixa de preço — direto no seu celular. Sem cadastro.
       </p>
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         <input
           type="tel"
           placeholder="Seu WhatsApp com DDD — ex.: 11 98765-4321"
-          className="flex-1 rounded-lg border border-neutral-300 px-3 py-2"
+          className="flex-1 rounded-xl border border-paper/20 bg-paper/10 px-4 py-3 text-paper placeholder:text-paper/40 outline-none focus:border-accent"
           value={zap}
           onChange={(e) => setZap(e.target.value)}
         />
         <button
           onClick={enviar}
           disabled={enviando}
-          className="rounded-lg bg-green-600 px-5 py-2 font-semibold text-white transition hover:bg-green-700 disabled:opacity-60"
+          className="rounded-xl bg-green-600 px-6 py-3 font-display font-bold text-white shadow-[0_3px_0_0_#14532d] transition hover:translate-y-0.5 hover:shadow-none disabled:opacity-60"
         >
           {enviando ? "Enviando…" : "Receber no WhatsApp"}
         </button>
       </div>
-      <label className="mt-3 flex items-start gap-2 text-sm text-neutral-700">
+      <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm text-paper/80">
         <input
           type="checkbox"
-          className="mt-1"
+          className="mt-0.5 h-4 w-4 accent-[#C2410C]"
           checked={querOrcamentos}
           onChange={(e) => setQuerOrcamentos(e.target.checked)}
         />
         <span>
-          Quero que <strong>pedreiros da minha região</strong> me mandem orçamentos reais deste serviço
-          <span className="block text-xs text-neutral-500">({resumo})</span>
+          Quero que <strong className="text-paper">pedreiros da minha região</strong> me mandem orçamentos reais
+          <span className="block text-xs text-paper/50">({resumo})</span>
         </span>
       </label>
-      {erro && <p className="mt-2 text-sm text-red-600">{erro}</p>}
+      {erro && <p className="mt-3 text-sm text-red-400">{erro}</p>}
     </div>
   );
 }
