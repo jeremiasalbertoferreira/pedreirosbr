@@ -174,6 +174,49 @@ Comportamento do webhook (`src/app/api/whatsapp/webhook/route.ts`):
 **Este webhook é também a base futura para receber respostas dos CLIENTES**
 (leads que responderem o resultado da calculadora).
 
+## 10. Asaas — cobrança da assinatura de território
+
+Quando o pedreiro responde "QUERO", o sistema já cria a assinatura no Asaas e
+manda o link da 1ª fatura no WhatsApp dele (Pix, boleto ou cartão). Quando o
+pagamento confirma, o webhook do Asaas o torna **assinante** automaticamente.
+
+### Setup (~15 min)
+
+1. Crie a conta em https://www.asaas.com (ou use a sandbox
+   https://sandbox.asaas.com para testar sem dinheiro real)
+2. **Integrações → Chave de API** → gere a chave
+3. No Coolify (PedreirosBR → Environment Variables):
+
+| Variável | Valor |
+|---|---|
+| `ASAAS_API_KEY` | chave gerada no passo 2 |
+| `ASAAS_ENV` | `sandbox` para testar / `production` para valer |
+| `ASAAS_VALOR_ASSINATURA` | `97` (mensalidade por território, em R$) |
+| `ASAAS_WEBHOOK_TOKEN` | string forte inventada por você (ex.: `uuidgen`) |
+
+4. **Integrações → Webhooks** na Asaas:
+   - URL: `https://pedreirosbr.com.br/api/asaas/webhook`
+   - Token de autenticação: o mesmo de `ASAAS_WEBHOOK_TOKEN`
+   - Eventos: pagamentos (recebido, confirmado, estornado) e assinaturas
+5. Redeploy no Coolify
+
+### Fluxo automático resultante
+
+```
+lead #20 na cidade → convite_territorio aos 3 primeiros da fila
+→ pedreiro responde "QUERO" → assinatura Asaas criada + link no WhatsApp
+→ ele paga (Pix confirma em segundos) → webhook Asaas → status "assinante"
+→ mensagem de boas-vindas → leads da cidade passam a ir para ele*
+```
+
+\* A distribuição dos leads ao assinante é a última peça (rota de entrega dos
+leads novos da cidade direto no WhatsApp do assinante) — ver update 18 na
+minha mente da VPS.
+
+### Status do profissional
+
+`capturado` → `contatado` → `interessado` → `assinante` · `recusado` · `cancelado`
+
 ## 8. Teste end-to-end
 
 Com as envs configuradas e o template aprovado:

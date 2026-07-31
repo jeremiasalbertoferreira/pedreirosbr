@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../lib/db";
 import { enviarMensagemTexto } from "../../../../lib/whatsapp";
+import { gerarCobrancaTerritorio, valorAssinatura } from "../../../../lib/asaas";
 import { getCidade } from "../../../../lib/data/cidades";
 
 /**
@@ -80,11 +81,42 @@ async function processarResposta(de: string, texto: string) {
         meta: { acao: "respondeu_quero", cidade: cidadeLabel },
       },
     });
-    await enviarMensagemTexto(
-      de,
-      `Recebido, ${profissional.nome.split(" ")[0]}! ✅ Você garantiu sua prioridade em ${cidadeLabel}. ` +
-        `Em breve te mandamos por aqui os detalhes da assinatura do território — valores, como recebem os clientes e como começar. Fique de olho! 🧱`
-    );
+
+    // Cobrança automática via Asaas: gera a assinatura do território e manda
+    // o link da 1ª fatura no WhatsApp. Sem ASAAS_API_KEY, cai no texto manual.
+    const cobranca = await gerarCobrancaTerritorio({
+      professionalId: profissional.id,
+      nome: profissional.nome,
+      whatsapp: profissional.whatsapp,
+      cidadeLabel,
+    });
+
+    if (cobranca.ok && cobranca.link) {
+      const valor = valorAssinatura().toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+      await enviarMensagemTexto(
+        de,
+        `Fechado, ${profissional.nome.split(" ")[0]}! ✅ Para ativar o território de ${cidadeLabel} é ` +
+          `${valor}/mês — um único serviço fechado já paga meses.\n\n` +
+          `Ative aqui (Pix, boleto ou cartão): ${cobranca.link}\n\n` +
+          `Assim que o pagamento confirmar, você vira o pedreiro oficial da cidade e os clientes começam a chegar no seu WhatsApp. 🧱`
+      );
+      await prisma.territoryEvent.create({
+        data: {
+          territorySlug: profissional.territorySlug,
+          tipo: "profissional",
+          meta: { acao: "link_pagamento_enviado", cidade: cidadeLabel, subscriptionId: cobranca.subscriptionId },
+        },
+      });
+    } else {
+      await enviarMensagemTexto(
+        de,
+        `Recebido, ${profissional.nome.split(" ")[0]}! ✅ Você garantiu sua prioridade em ${cidadeLabel}. ` +
+          `Em breve te mandamos por aqui o link para ativar o território. Fique de olho! 🧱`
+      );
+      if (cobranca.motivo !== "asaas_nao_configurado") {
+        console.warn(`[webhook/whatsapp] cobrança falhou (${cobranca.motivo}) para ${profissional.id}`);
+      }
+    }
     console.log(`[webhook/whatsapp] ${profissional.nome} (${cidadeLabel}) → interessado`);
   } else if (/\b(sair|parar|nao|não)\b/.test(normalizado)) {
     await prisma.professional.update({
