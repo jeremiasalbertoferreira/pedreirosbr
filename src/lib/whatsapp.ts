@@ -102,6 +102,46 @@ export async function enviarResultadoCalculadora(
 }
 
 /**
+ * Mensagem de texto livre — só funciona dentro da janela de 24h aberta
+ * quando o usuário responde (ex.: pedreiro mandou "QUERO" no webhook).
+ * Fora da janela, a Meta rejeita: nesses casos use sempre template.
+ */
+export async function enviarMensagemTexto(zap: string, texto: string): Promise<ResultadoEnvio> {
+  const token = process.env.WHATSAPP_TOKEN;
+  const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  if (!token || !phoneId) return { ok: false, motivo: "nao_configurado" };
+
+  try {
+    const resp = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${phoneId}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to: paraFormatoInternacional(zap),
+        type: "text",
+        text: { body: texto.slice(0, 4000) },
+      }),
+    });
+
+    const data = (await resp.json().catch(() => ({}))) as {
+      messages?: { id: string }[];
+      error?: { message?: string };
+    };
+    if (!resp.ok) {
+      console.error("[whatsapp] falha texto Meta:", resp.status, JSON.stringify(data.error ?? data));
+      return { ok: false, motivo: data.error?.message ?? `http_${resp.status}` };
+    }
+    return { ok: true, messageId: data.messages?.[0]?.id };
+  } catch (err) {
+    console.error("[whatsapp] erro de rede (texto):", err);
+    return { ok: false, motivo: "erro_rede" };
+  }
+}
+
+/**
  * Convida um pedreiro da fila quando a cidade dele desperta (fase 2).
  * Usa o template aprovado "convite_territorio" (ou WHATSAPP_TEMPLATE_CONVITE).
  *

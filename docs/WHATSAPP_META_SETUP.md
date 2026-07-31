@@ -152,6 +152,28 @@ cidade → `src/lib/fila.ts::notificarFilaCidade` chama os 3 primeiros com
 status "capturado" e marca quem recebeu como "contatado" (ninguém é
 convidado duas vezes).
 
+## 9. Webhook — receber o "QUERO" do pedreiro
+
+Para o ciclo fechar (convite → resposta → interessado), cadastre o webhook:
+
+1. No app Meta → produto **WhatsApp → Configuração → Webhook**
+2. **URL de retorno de chamada:** `https://pedreirosbr.com.br/api/whatsapp/webhook`
+3. **Token de verificação:** invente uma string forte (ex.: `uuidgen`) e coloque
+   a mesma no Coolify como `WHATSAPP_VERIFY_TOKEN` → redeploy
+4. Clique em **Verificar e salvar** (a Meta chama o GET do endpoint; se falhar,
+   confira se o redeploy já subiu)
+5. Em **Campos de webhook**, assine: **`messages`**
+
+Comportamento do webhook (`src/app/api/whatsapp/webhook/route.ts`):
+
+- Pedreiro responde **"QUERO"** → status vira `interessado` + recebe confirmação
+  na hora (mensagem livre dentro da janela de 24h) + evento registrado no organismo
+- Responde **"sair"/"parar"/"não"** → status `recusado`, sai da fila com mensagem educada
+- Só processa quem está com status `contatado`; o resto é ignorado
+
+**Este webhook é também a base futura para receber respostas dos CLIENTES**
+(leads que responderem o resultado da calculadora).
+
 ## 8. Teste end-to-end
 
 Com as envs configuradas e o template aprovado:
