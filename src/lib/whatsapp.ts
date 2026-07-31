@@ -100,3 +100,26 @@ export async function enviarResultadoCalculadora(
     { type: "text", text: regiao.slice(0, 200) },
   ]);
 }
+
+/**
+ * Convida um pedreiro da fila quando a cidade dele desperta (fase 2).
+ * Usa o template aprovado "convite_territorio" (ou WHATSAPP_TEMPLATE_CONVITE).
+ *
+ * @param zap     WhatsApp do profissional (só dígitos, com DDD)
+ * @param nome    Primeiro nome ou nome completo
+ * @param cidade  "Osasco/SP"
+ * @param posicao Posição dele na fila da cidade
+ */
+export async function enviarConviteTerritorio(
+  zap: string,
+  nome: string,
+  cidade: string,
+  posicao: number
+): Promise<ResultadoEnvio> {
+  const template = process.env.WHATSAPP_TEMPLATE_CONVITE ?? "convite_territorio";
+  return enviarTemplate(zap, template, [
+    { type: "text", text: nome.slice(0, 200) },
+    { type: "text", text: cidade.slice(0, 200) },
+    { type: "text", text: String(posicao) },
+  ]);
+}

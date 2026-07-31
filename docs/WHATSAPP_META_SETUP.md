@@ -109,6 +109,49 @@ Exemplo de preenchimento (a Meta pede amostras das variáveis):
 
 Aprovação costuma sair em minutos (templates de utilidade sem marketing).
 
+### Template 2: `convite_territorio` (fase 2 — chamar a fila de pedreiros)
+
+Disparado automaticamente pelo organismo quando uma cidade cruza 20 leads:
+os primeiros da fila (`/para-pedreiros`) recebem o convite para assumir
+o território. Crie junto com o primeiro, aproveitando a mesma sessão:
+
+- **Nome:** `convite_territorio`
+- **Categoria:** Utilidade (Utility)
+- **Idioma:** Português (BR)
+- **Cabeçalho:** nenhum
+- **Corpo:**
+
+```
+Olá {{1}}! Novidade do PedreirosBR 🧱
+
+A fila de *{{2}}* abriu: a procura por pedreiro na cidade cruzou o limite
+e o território vai ser ativado. Você está na posição *{{3}}* da fila.
+
+Responda esta mensagem com QUERO para receber os detalhes e garantir sua
+prioridade. Se não tiver interesse, é só ignorar — a vaga passa para o
+próximo da fila.
+```
+
+- **Rodapé:** `PedreirosBR • você entrou na fila em pedreirosbr.com.br/para-pedreiros`
+- **Botões:** nenhum
+
+Amostras das variáveis:
+
+- `{{1}}` → `João Silva`
+- `{{2}}` → `Osasco/SP`
+- `{{3}}` → `2`
+
+> Se a Meta recusar como "conteúdo promocional", reenvie o mesmo texto com
+> categoria **Marketing** — o convite funciona igual, só muda o preço por
+> conversa (marketing custa um pouco mais que utilidade).
+
+Env var opcional: `WHATSAPP_TEMPLATE_CONVITE` (default `convite_territorio`).
+
+O envio acontece sozinho: `POST /api/lead` → organismo cruza 20 leads na
+cidade → `src/lib/fila.ts::notificarFilaCidade` chama os 3 primeiros com
+status "capturado" e marca quem recebeu como "contatado" (ninguém é
+convidado duas vezes).
+
 ## 8. Teste end-to-end
 
 Com as envs configuradas e o template aprovado:

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../lib/db";
 import { registrarEvento } from "../../../lib/organismo";
 import { enviarResultadoCalculadora } from "../../../lib/whatsapp";
+import { notificarFilaCidade } from "../../../lib/fila";
 
 function soDigitos(s: string): string {
   return s.replace(/\D/g, "");
@@ -49,7 +50,20 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, whatsappEnviado, ...r });
+    // Gatilho da fase 2: a cidade acabou de despertar (limiar de leads cruzado
+    // neste exato request) → chama os primeiros da fila de pedreiros dela.
+    let filaNotificada = 0;
+    if (r.assinaturaDespertou) {
+      try {
+        const despertar = await notificarFilaCidade(String(territorySlug).slice(0, 120));
+        filaNotificada = despertar.convidados;
+        if (!despertar.ok) console.warn("[api/lead] despertar sem convites:", despertar.motivo);
+      } catch (err) {
+        console.error("[api/lead] falha ao notificar fila (ignorada):", err);
+      }
+    }
+
+    return NextResponse.json({ ok: true, whatsappEnviado, filaNotificada, ...r });
   } catch (err) {
     console.error("[api/lead]", err);
     return NextResponse.json({ ok: false }, { status: 500 });
