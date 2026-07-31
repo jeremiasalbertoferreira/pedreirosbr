@@ -56,7 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <Link href="/calculadoras" className="rounded-lg px-3 py-2 text-ink-soft transition hover:bg-accent-soft hover:text-accent-dark">
                   Calculadoras
                 </Link>
-                <Link href="/quanto-cobrar" className="hidden rounded-lg px-3 py-2 text-ink-soft transition hover:bg-accent-soft hover:text-accent-dark sm:block">
+                <Link href="/para-pedreiros" className="hidden rounded-lg px-3 py-2 text-ink-soft transition hover:bg-accent-soft hover:text-accent-dark sm:block">
                   Para pedreiros
                 </Link>
                 <Link

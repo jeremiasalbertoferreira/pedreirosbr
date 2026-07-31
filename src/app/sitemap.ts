@@ -16,6 +16,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/calculadoras`, lastModified: now, changeFrequency: "weekly", priority: 0.9 },
     { url: `${SITE_URL}/orcamento`, lastModified: now, changeFrequency: "weekly", priority: 0.9 },
     { url: `${SITE_URL}/quanto-cobrar`, lastModified: now, changeFrequency: "weekly", priority: 0.8 },
+    { url: `${SITE_URL}/para-pedreiros`, lastModified: now, changeFrequency: "weekly", priority: 0.8 },
   ];
 
   const calculadoras: MetadataRoute.Sitemap = oficio.servicos.map((s) => ({

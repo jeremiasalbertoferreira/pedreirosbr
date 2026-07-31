@@ -173,16 +173,16 @@ export default function Home() {
         </h2>
         <div className="mt-8 flex flex-wrap gap-4">
           <Link
-            href="/orcamento"
+            href="/para-pedreiros"
             className="rounded-xl bg-accent px-7 py-3.5 font-display text-lg font-bold text-white shadow-[0_4px_0_0_#7C2D12] transition hover:translate-y-0.5 hover:shadow-none"
           >
-            Gerar orçamento em PDF
+            Receber clientes da minha cidade
           </Link>
           <Link
-            href="/quanto-cobrar"
+            href="/orcamento"
             className="rounded-xl border border-paper/30 px-7 py-3.5 font-display text-lg font-bold text-paper transition hover:border-paper"
           >
-            Quanto cobrar em 2026
+            Gerar orçamento em PDF
           </Link>
         </div>
       </section>
