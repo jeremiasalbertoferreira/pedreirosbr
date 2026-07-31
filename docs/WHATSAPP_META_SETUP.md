@@ -152,6 +152,38 @@ cidade → `src/lib/fila.ts::notificarFilaCidade` chama os 3 primeiros com
 status "capturado" e marca quem recebeu como "contatado" (ninguém é
 convidado duas vezes).
 
+### Template 3: `novo_lead` (distribuição — entrega do produto ao assinante)
+
+Disparado quando um lead que marcou "quero orçamentos" chega numa cidade
+com assinante ativo. É a mensagem que o pedreiro pagou para receber:
+
+- **Nome:** `novo_lead`
+- **Categoria:** Utilidade (Utility)
+- **Idioma:** Português (BR)
+- **Cabeçalho:** nenhum
+- **Corpo:**
+
+```
+Novo cliente em {{1}}! 🧱
+
+Serviço: {{2}}
+WhatsApp do cliente: {{3}}
+
+Ele pediu orçamento de pedreiros da região agora há pouco. Chame primeiro —
+quem responde rápido, fecha. Boa obra!
+```
+
+- **Rodapé:** `PedreirosBR • cliente consentiu em receber orçamentos`
+- **Botões:** nenhum
+
+Amostras:
+
+- `{{1}}` → `Osasco/SP`
+- `{{2}}` → `Reboco de parede: R$ 1.240–R$ 1.580 (40 m²)`
+- `{{3}}` → `11987654321`
+
+Env var opcional: `WHATSAPP_TEMPLATE_LEAD` (default `novo_lead`).
+
 ## 9. Webhook — receber o "QUERO" do pedreiro
 
 Para o ciclo fechar (convite → resposta → interessado), cadastre o webhook:

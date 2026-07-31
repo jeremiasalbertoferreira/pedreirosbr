@@ -163,3 +163,26 @@ export async function enviarConviteTerritorio(
     { type: "text", text: String(posicao) },
   ]);
 }
+
+/**
+ * Entrega um lead novo no WhatsApp do pedreiro assinante da cidade.
+ * Usa o template aprovado "novo_lead" (ou WHATSAPP_TEMPLATE_LEAD).
+ *
+ * @param zap             WhatsApp do assinante
+ * @param cidade          "Osasco/SP"
+ * @param servicoResumo   "Reboco de parede: R$ 1.240–R$ 1.580 (40 m²)"
+ * @param whatsappCliente Telefone do cliente (só dígitos, com DDD)
+ */
+export async function enviarNovoLead(
+  zap: string,
+  cidade: string,
+  servicoResumo: string,
+  whatsappCliente: string
+): Promise<ResultadoEnvio> {
+  const template = process.env.WHATSAPP_TEMPLATE_LEAD ?? "novo_lead";
+  return enviarTemplate(zap, template, [
+    { type: "text", text: cidade.slice(0, 200) },
+    { type: "text", text: servicoResumo.slice(0, 500) },
+    { type: "text", text: whatsappCliente.slice(0, 20) },
+  ]);
+}

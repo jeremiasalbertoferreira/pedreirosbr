@@ -3,6 +3,7 @@ import { prisma } from "../../../lib/db";
 import { registrarEvento } from "../../../lib/organismo";
 import { enviarResultadoCalculadora } from "../../../lib/whatsapp";
 import { notificarFilaCidade } from "../../../lib/fila";
+import { distribuirLead } from "../../../lib/distribuicao";
 
 function soDigitos(s: string): string {
   return s.replace(/\D/g, "");
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "dados incompletos ou WhatsApp inválido" }, { status: 400 });
     }
 
-    await prisma.lead.create({
+    const lead = await prisma.lead.create({
       data: {
         servico: String(servico).slice(0, 60),
         descricao: descricao ? String(descricao).slice(0, 500) : null,
@@ -63,7 +64,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, whatsappEnviado, filaNotificada, ...r });
+    // Distribuição — a entrega do produto: lead novo em cidade com assinante
+    // vai direto pro WhatsApp dele. REGRA LGPD: só distribui quem marcou
+    // "quero receber orçamentos de profissionais" (descricao presente).
+    let leadDistribuido = false;
+    if (descricao) {
+      const dist = await distribuirLead({
+        leadId: lead.id,
+        territorySlug: String(territorySlug).slice(0, 120),
+        servico: String(servico).slice(0, 60),
+        resumo: resumo ? String(resumo) : undefined,
+        whatsappCliente: zap,
+      });
+      leadDistribuido = dist.distribuido;
+    }
+
+    return NextResponse.json({ ok: true, whatsappEnviado, filaNotificada, leadDistribuido, ...r });
   } catch (err) {
     console.error("[api/lead]", err);
     return NextResponse.json({ ok: false }, { status: 500 });
