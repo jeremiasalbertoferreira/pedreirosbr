@@ -39,6 +39,7 @@ export function WhatsappCapture({ servico, territorio, resumo, resultadoSnapshot
           whatsapp: digitos,
           origem: "calculadora",
           resultado: resultadoSnapshot,
+          resumo,
         }),
       });
       setEnviado(true);
