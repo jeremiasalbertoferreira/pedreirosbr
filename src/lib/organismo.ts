@@ -5,7 +5,8 @@
  *  - quando a fase 2 desperta num território (oferta de assinatura a profissionais)
  */
 import { prisma } from "./db";
-import { getOficioAtivo } from "../oficios";
+import { getOficioAtivo, SITE_URL } from "../oficios";
+import { pingIndexNow } from "./indexnow";
 
 export type TipoEvento = "calculo" | "busca" | "lead" | "orcamento_pdf" | "avaliacao";
 
@@ -64,6 +65,8 @@ export async function registrarEvento(opts: {
         data: { paginaAtiva: true },
       });
       resultado.paginaNasceu = true;
+      // Avisa Bing/DuckDuckGo/Yandex na hora que a página nasce (IndexNow)
+      await pingIndexNow([`${SITE_URL}/pedreiro-em/${opts.territorySlug}`]);
     }
 
     // Limiar 2: fase 2 desperta — demanda comprovada, organismo oferece assinatura
