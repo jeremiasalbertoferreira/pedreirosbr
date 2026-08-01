@@ -66,8 +66,10 @@ export async function gerarCobrancaTerritorio(opts: {
   nome: string;
   whatsapp: string;
   cidadeLabel: string;
+  cpf?: string; // Asaas exige CPF/CNPJ para emitir cobrança
 }): Promise<ResultadoCobranca> {
   if (!asaasConfigurado()) return { ok: false, motivo: "asaas_nao_configurado" };
+  if (!opts.cpf) return { ok: false, motivo: "cpf_ausente" };
 
   try {
     // 1. Cliente (reutiliza se já existir pelo externalReference)
@@ -85,6 +87,7 @@ export async function gerarCobrancaTerritorio(opts: {
           body: JSON.stringify({
             name: opts.nome,
             mobilePhone: opts.whatsapp,
+            cpfCnpj: opts.cpf,
             externalReference: opts.professionalId,
             notificationDisabled: true, // quem avisa é o nosso WhatsApp, não o Asaas
           }),

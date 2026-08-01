@@ -60,49 +60,38 @@ async function processarResposta(de: string, texto: string) {
   const zap = de.replace(/\D/g, "").replace(/^55/, ""); // Professional guarda sem o 55
   const normalizado = texto.trim().toLowerCase();
 
-  // Só nos interessa quem já foi convidado (status "contatado")
+  // Contatados (convite) e interessados (aguardando CPF/pagamento) nos interessam
   const profissional = await prisma.professional.findFirst({
-    where: { whatsapp: { endsWith: zap.slice(-11) }, status: "contatado" },
+    where: { whatsapp: { endsWith: zap.slice(-11) }, status: { in: ["contatado", "interessado"] } },
   });
   if (!profissional) return;
 
   const cidade = getCidade(profissional.territorySlug);
   const cidadeLabel = cidade ? `${cidade.nome}/${cidade.uf}` : profissional.territorySlug;
+  const primeiroNome = profissional.nome.split(" ")[0];
 
-  if (/\bquero\b/.test(normalizado)) {
-    await prisma.professional.update({
-      where: { id: profissional.id },
-      data: { status: "interessado" },
-    });
-    await prisma.territoryEvent.create({
-      data: {
-        territorySlug: profissional.territorySlug,
-        tipo: "profissional",
-        meta: { acao: "respondeu_quero", cidade: cidadeLabel },
-      },
-    });
-
-    // Cobrança automática via Asaas: gera a assinatura do território e manda
-    // o link da 1ª fatura no WhatsApp. Sem ASAAS_API_KEY, cai no texto manual.
+  /** Gera a cobrança no Asaas e manda o link (ou cai no texto manual). */
+  async function cobrarComLink() {
     const cobranca = await gerarCobrancaTerritorio({
-      professionalId: profissional.id,
-      nome: profissional.nome,
-      whatsapp: profissional.whatsapp,
+      professionalId: profissional!.id,
+      nome: profissional!.nome,
+      whatsapp: profissional!.whatsapp,
       cidadeLabel,
+      cpf: profissional!.cpf ?? undefined,
     });
 
     if (cobranca.ok && cobranca.link) {
       const valor = valorAssinatura().toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
       await enviarMensagemTexto(
         de,
-        `Fechado, ${profissional.nome.split(" ")[0]}! ✅ Para ativar o território de ${cidadeLabel} é ` +
+        `Fechado, ${primeiroNome}! ✅ Para ativar o território de ${cidadeLabel} é ` +
           `${valor}/mês — um único serviço fechado já paga meses.\n\n` +
           `Ative aqui (Pix, boleto ou cartão): ${cobranca.link}\n\n` +
           `Assim que o pagamento confirmar, você vira o pedreiro oficial da cidade e os clientes começam a chegar no seu WhatsApp. 🧱`
       );
       await prisma.territoryEvent.create({
         data: {
-          territorySlug: profissional.territorySlug,
+          territorySlug: profissional!.territorySlug,
           tipo: "profissional",
           meta: { acao: "link_pagamento_enviado", cidade: cidadeLabel, subscriptionId: cobranca.subscriptionId },
         },
@@ -110,13 +99,73 @@ async function processarResposta(de: string, texto: string) {
     } else {
       await enviarMensagemTexto(
         de,
-        `Recebido, ${profissional.nome.split(" ")[0]}! ✅ Você garantiu sua prioridade em ${cidadeLabel}. ` +
+        `Recebido, ${primeiroNome}! ✅ Você garantiu sua prioridade em ${cidadeLabel}. ` +
           `Em breve te mandamos por aqui o link para ativar o território. Fique de olho! 🧱`
       );
-      if (cobranca.motivo !== "asaas_nao_configurado") {
-        console.warn(`[webhook/whatsapp] cobrança falhou (${cobranca.motivo}) para ${profissional.id}`);
+      if (cobranca.motivo !== "asaas_nao_configurado" && cobranca.motivo !== "cpf_ausente") {
+        console.warn(`[webhook/whatsapp] cobrança falhou (${cobranca.motivo}) para ${profissional!.id}`);
       }
     }
+  }
+
+  // Pedido de CPF pendente: pedreiro interessado mandou só números (CPF/CNPJ)
+  const soNumeros = texto.replace(/\D/g, "");
+  if (
+    profissional.status === "interessado" &&
+    !profissional.cpf &&
+    (soNumeros.length === 11 || soNumeros.length === 14) &&
+    texto.replace(/[\d\s.\-/]/g, "") === ""
+  ) {
+    await prisma.professional.update({
+      where: { id: profissional.id },
+      data: { cpf: soNumeros },
+    });
+    await prisma.territoryEvent.create({
+      data: {
+        territorySlug: profissional.territorySlug,
+        tipo: "profissional",
+        meta: { acao: "cpf_recebido", cidade: cidadeLabel },
+      },
+    });
+    console.log(`[webhook/whatsapp] ${profissional.nome} (${cidadeLabel}) → CPF recebido, gerando cobrança`);
+    await cobrarComLink();
+    return;
+  }
+
+  if (/\bquero\b/.test(normalizado)) {
+    if (profissional.status === "contatado") {
+      await prisma.professional.update({
+        where: { id: profissional.id },
+        data: { status: "interessado" },
+      });
+      await prisma.territoryEvent.create({
+        data: {
+          territorySlug: profissional.territorySlug,
+          tipo: "profissional",
+          meta: { acao: "respondeu_quero", cidade: cidadeLabel },
+        },
+      });
+    }
+
+    // Sem CPF não dá para emitir cobrança no Asaas — pede antes
+    if (!profissional.cpf) {
+      await enviarMensagemTexto(
+        de,
+        `Fechado, ${primeiroNome}! ✅ Só falta um passo: me manda seu CPF (só os números) ` +
+          `para eu emitir a ativação do território de ${cidadeLabel} — Pix, boleto ou cartão. 🧱`
+      );
+      await prisma.territoryEvent.create({
+        data: {
+          territorySlug: profissional.territorySlug,
+          tipo: "profissional",
+          meta: { acao: "cpf_solicitado", cidade: cidadeLabel },
+        },
+      });
+      console.log(`[webhook/whatsapp] ${profissional.nome} (${cidadeLabel}) → interessado, CPF solicitado`);
+      return;
+    }
+
+    await cobrarComLink();
     console.log(`[webhook/whatsapp] ${profissional.nome} (${cidadeLabel}) → interessado`);
   } else if (/\b(sair|parar|nao|não)\b/.test(normalizado)) {
     await prisma.professional.update({
@@ -129,5 +178,5 @@ async function processarResposta(de: string, texto: string) {
     );
     console.log(`[webhook/whatsapp] ${profissional.nome} (${cidadeLabel}) → recusado`);
   }
-  // Outras mensagens de contatados ficam só registradas no log do servidor.
+  // Outras mensagens ficam só registradas no log do servidor.
 }

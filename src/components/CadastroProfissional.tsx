@@ -24,6 +24,7 @@ interface Resultado {
 export function CadastroProfissional({ ufs, cidades }: Props) {
   const [nome, setNome] = useState("");
   const [zap, setZap] = useState("");
+  const [cpf, setCpf] = useState("");
   const [uf, setUf] = useState("SP");
   const [cidadeSlug, setCidadeSlug] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -37,16 +38,23 @@ export function CadastroProfissional({ ufs, cidades }: Props) {
 
   async function enviar() {
     const digitos = zap.replace(/\D/g, "");
+    const cpfDigitos = cpf.replace(/\D/g, "");
     if (nome.trim().length < 2) { setErro("Digite seu nome."); return; }
     if (digitos.length < 10) { setErro("Digite um WhatsApp válido com DDD."); return; }
     if (!cidadeSlug) { setErro("Escolha a cidade onde você trabalha."); return; }
+    if (cpfDigitos && cpfDigitos.length !== 11 && cpfDigitos.length !== 14) {
+      setErro("CPF deve ter 11 dígitos (ou CNPJ com 14)."); return;
+    }
     setErro("");
     setEnviando(true);
     try {
       const resp = await fetch("/api/profissional", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nome: nome.trim(), whatsapp: digitos, territorySlug: cidadeSlug, uf }),
+        body: JSON.stringify({
+          nome: nome.trim(), whatsapp: digitos, territorySlug: cidadeSlug, uf,
+          ...(cpfDigitos ? { cpf: cpfDigitos } : {}),
+        }),
       });
       const data = await resp.json();
       if (!resp.ok || !data.ok) {
@@ -102,6 +110,14 @@ export function CadastroProfissional({ ufs, cidades }: Props) {
           className="rounded-xl border border-paper/20 bg-paper/10 px-4 py-3 text-paper placeholder:text-paper/40 outline-none focus:border-accent"
           value={zap}
           onChange={(e) => setZap(e.target.value)}
+        />
+        <input
+          type="text"
+          inputMode="numeric"
+          placeholder="CPF (opcional — só p/ cobrança futura)"
+          className="rounded-xl border border-paper/20 bg-paper/10 px-4 py-3 text-paper placeholder:text-paper/40 outline-none focus:border-accent"
+          value={cpf}
+          onChange={(e) => setCpf(e.target.value)}
         />
         <select
           className="rounded-xl border border-paper/20 bg-paper/10 px-4 py-3 text-paper outline-none focus:border-accent"

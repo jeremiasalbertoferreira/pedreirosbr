@@ -15,10 +15,11 @@ function soDigitos(s: string): string {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { nome, whatsapp, territorySlug, uf } = body ?? {};
+    const { nome, whatsapp, territorySlug, uf, cpf } = body ?? {};
 
     const nomeLimpo = String(nome ?? "").trim().slice(0, 120);
     const zap = soDigitos(String(whatsapp ?? ""));
+    const cpfLimpo = soDigitos(String(cpf ?? ""));
     const slug = String(territorySlug ?? "").slice(0, 120);
     const cidade = getCidade(slug);
 
@@ -28,13 +29,24 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    if (cpfLimpo && cpfLimpo.length !== 11 && cpfLimpo.length !== 14) {
+      return NextResponse.json(
+        { ok: false, error: "CPF deve ter 11 dígitos (ou CNPJ com 14)." },
+        { status: 400 }
+      );
+    }
 
     // WhatsApp é a chave: recadastro atualiza cidade/nome (mudança de cidade = nova fila)
     const existente = await prisma.professional.findUnique({ where: { whatsapp: zap } });
     const profissional = existente
       ? await prisma.professional.update({
           where: { whatsapp: zap },
-          data: { nome: nomeLimpo, territorySlug: cidade.slug, origem: "para-pedreiros" },
+          data: {
+            nome: nomeLimpo,
+            territorySlug: cidade.slug,
+            origem: "para-pedreiros",
+            ...(cpfLimpo ? { cpf: cpfLimpo } : {}),
+          },
         })
       : await prisma.professional.create({
           data: {
@@ -42,6 +54,7 @@ export async function POST(req: NextRequest) {
             whatsapp: zap,
             territorySlug: cidade.slug,
             origem: "para-pedreiros",
+            ...(cpfLimpo ? { cpf: cpfLimpo } : {}),
           },
         });
 

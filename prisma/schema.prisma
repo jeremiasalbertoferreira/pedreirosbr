@@ -65,6 +65,7 @@ model Professional {
   id          String   @id @default(cuid())
   nome        String
   whatsapp    String   @unique
+  cpf         String?  // exigido pelo Asaas para cobrança (LGPD: só para billing)
   slug        String?  @unique // página pública futura: /joao-osasco
   territorySlug String
   oficio      String   @default("pedreiro")
