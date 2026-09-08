@@ -18,6 +18,7 @@ export function WhatsappCapture({ servico, territorio, resumo, resultadoSnapshot
   const [zap, setZap] = useState("");
   const [querOrcamentos, setQuerOrcamentos] = useState(false);
   const [enviado, setEnviado] = useState(false);
+  const [verificationUrl, setVerificationUrl] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
 
@@ -27,7 +28,7 @@ export function WhatsappCapture({ servico, territorio, resumo, resultadoSnapshot
     setErro("");
     setEnviando(true);
     try {
-      await fetch("/api/lead", {
+      const resp = await fetch("/api/lead", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -40,8 +41,14 @@ export function WhatsappCapture({ servico, territorio, resumo, resultadoSnapshot
           origem: "calculadora",
           resultado: resultadoSnapshot,
           resumo,
+          materials: String(resultadoSnapshot.materials ?? ""),
+          quoteConsent: querOrcamentos,
+          consentVersion: "2026-09-08",
         }),
       });
+      const data = await resp.json();
+      if (!resp.ok || !data.ok || !data.verificationUrl) { setErro(data.error ?? "Não foi possível preparar o envio."); return; }
+      setVerificationUrl(data.verificationUrl);
       setEnviado(true);
     } catch {
       setErro("Não conseguimos registrar agora. Tente de novo em instantes.");
@@ -53,11 +60,11 @@ export function WhatsappCapture({ servico, territorio, resumo, resultadoSnapshot
   if (enviado) {
     return (
       <div className="mt-5 rounded-xl border-2 border-green-600/30 bg-green-50 p-5">
-        <p className="font-display text-lg font-bold text-green-800">Pronto! 🎉</p>
+        <p className="font-display text-lg font-bold text-green-800">Confirme para receber o resultado</p>
         <p className="mt-1 text-sm text-green-800/80">
-          Vamos te mandar no WhatsApp o resultado detalhado com a lista de materiais
-          {querOrcamentos ? " e avisar quando tivermos pedreiros na sua região." : "."}
+          Abra o WhatsApp e envie a mensagem de confirmação. Só depois enviaremos sua simulação e, se autorizado, encaminharemos o pedido ao profissional da cidade. O link vale por 30 minutos.
         </p>
+        <a href={verificationUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block rounded-lg bg-green-700 px-4 py-3 font-bold text-white">Confirmar e receber no WhatsApp</a>
       </div>
     );
   }
@@ -66,11 +73,12 @@ export function WhatsappCapture({ servico, territorio, resumo, resultadoSnapshot
     <div className="mt-6 rounded-2xl bg-ink p-5 text-paper sm:p-6">
       <p className="font-display text-lg font-bold">Receba o resultado completo no WhatsApp</p>
       <p className="mt-1 text-sm text-paper/70">
-        Lista de materiais detalhada, quantidades e faixa de preço — direto no seu celular. Sem cadastro.
+        Lista de materiais, quantidades e faixa de preço — confirme seu número para receber a simulação.
       </p>
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         <input
           type="tel"
+          aria-label="WhatsApp para receber o resultado"
           placeholder="Seu WhatsApp com DDD — ex.: 11 98765-4321"
           className="flex-1 rounded-xl border border-paper/20 bg-paper/10 px-4 py-3 text-paper placeholder:text-paper/40 outline-none focus:border-accent"
           value={zap}
@@ -89,13 +97,16 @@ export function WhatsappCapture({ servico, territorio, resumo, resultadoSnapshot
           type="checkbox"
           className="mt-0.5 h-4 w-4 accent-[#C2410C]"
           checked={querOrcamentos}
+          disabled={territorio.slug.startsWith("uf-")}
           onChange={(e) => setQuerOrcamentos(e.target.checked)}
         />
         <span>
-          Quero que <strong className="text-paper">pedreiros da minha região</strong> me mandem orçamentos reais
+          Autorizo compartilhar meu telefone e pedido com <strong className="text-paper">o profissional da minha cidade</strong>, quando disponível, para contato sobre orçamento
           <span className="block text-xs text-paper/50">({resumo})</span>
         </span>
       </label>
+      {territorio.slug.startsWith("uf-") && <p className="mt-2 text-xs text-paper/80">Selecione uma cidade na calculadora para pedir orçamentos de profissionais.</p>}
+      <p className="mt-3 text-xs text-paper/80">Ao confirmar no WhatsApp, você solicita esta simulação. Compartilhamos seu telefone com o profissional da cidade somente se marcar a opção acima. <a className="underline" href="/politica-de-privacidade">Privacidade</a>.</p>
       {erro && <p className="mt-3 text-sm text-red-400">{erro}</p>}
     </div>
   );

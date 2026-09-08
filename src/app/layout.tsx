@@ -47,12 +47,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen antialiased">
         <div className="relative z-10">
           <header className="sticky top-0 z-50 border-b border-ink/10 bg-paper/90 backdrop-blur">
-            <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+            <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-3">
               <Link href="/" className="font-display text-xl font-black tracking-tight text-ink">
                 PEDREIROS<span className="text-accent">BR</span>
                 <span className="ml-1 align-middle text-xs font-medium text-ink-soft">.com.br</span>
               </Link>
-              <nav className="flex items-center gap-1 text-sm font-medium sm:gap-2">
+              <nav aria-label="Navegação principal" className="flex flex-wrap items-center gap-1 text-sm font-medium sm:gap-2">
                 <Link href="/calculadoras" className="rounded-lg px-3 py-2 text-ink-soft transition hover:bg-accent-soft hover:text-accent-dark">
                   Calculadoras
                 </Link>
@@ -93,9 +93,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <div className="text-sm">
                   <p className="font-semibold text-ink">Transparência</p>
                   <p className="mt-2 text-ink-soft">
-                    Estimativas baseadas em referências públicas regionais (CUB/Sinduscon) e padrões
-                    de consumo de obra. Valores reais variam por profissional e local.
+                    Simulações preliminares com fatores por estado e coeficientes de consumo.
+                    Não são cotações locais nem substituem avaliação técnica. Confira preços e quantidades antes de executar.
                   </p>
+                  <ul className="mt-3 space-y-2 text-ink-soft">
+                    <li><Link href="/politica-de-privacidade">Privacidade</Link></li>
+                    <li><Link href="/termos">Termos de uso</Link></li>
+                    <li><Link href="/contato">Contato e cancelamento</Link></li>
+                  </ul>
                 </div>
               </div>
               <p className="mt-10 border-t border-ink/10 pt-6 text-xs text-ink-soft">

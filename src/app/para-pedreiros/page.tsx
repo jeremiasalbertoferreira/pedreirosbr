@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getOficioAtivo, SITE_URL } from "../../oficios";
+import { SITE_URL } from "../../oficios";
 import { UFS } from "../../lib/data/ufs";
 import { CIDADES } from "../../lib/data/cidades";
 import { CadastroProfissional } from "../../components/CadastroProfissional";
 import { JsonLd } from "../../components/JsonLd";
 
-const oficio = getOficioAtivo();
 
 export const metadata: Metadata = {
   title: "Para pedreiros: receba clientes de obra da sua cidade no WhatsApp",
@@ -42,7 +41,7 @@ export default function ParaPedreirosPage() {
               name: "Quanto custa para o pedreiro?",
               acceptedAnswer: {
                 "@type": "Answer",
-                text: "Entrar na fila é grátis. A assinatura por cidade só será oferecida quando houver clientes reais chegando — e um único serviço fechado já paga meses de assinatura.",
+                text: "Entrar na fila é grátis. A assinatura custa R$ 97/mês e só será oferecida quando houver pedidos confirmados suficientes e a vaga exclusiva estiver disponível. Não há garantia de quantidade de pedidos ou contratação.",
               },
             },
           ],
@@ -56,9 +55,9 @@ export default function ParaPedreirosPage() {
           Clientes de obra da sua cidade, direto no seu WhatsApp.
         </h1>
         <p className="mt-4 max-w-2xl text-lg text-ink-soft">
-          Todo dia, donos de obra da sua região usam nossas calculadoras para descobrir quanto custa
-          o serviço deles — e pedem orçamento de um profissional da cidade. Quando a procura na sua
-          cidade esquentar, quem estiver na frente da fila assume o território.
+          Donos de obra podem usar nossas calculadoras e solicitar contato de um profissional.
+          Quando sua cidade reunir pedidos confirmados suficientes, a vaga exclusiva será oferecida
+          por R$ 97/mês. Não há garantia de quantidade de pedidos ou de fechamento de serviços.
         </p>
       </section>
 
@@ -85,7 +84,7 @@ export default function ParaPedreirosPage() {
             {
               n: "03",
               t: "Cliente no seu WhatsApp",
-              d: "Os primeiros da fila recebem a oferta de assinatura da cidade — e cada cliente novo cai direto no seu WhatsApp, com endereço e serviço.",
+              d: "O primeiro profissional elegível da fila recebe a oferta de R$ 97/mês. Após a ativação, recebe pedidos autorizados dos clientes, com serviço e telefone de contato.",
             },
           ].map((p) => (
             <div key={p.n} className="rounded-2xl bg-white p-6">
@@ -104,13 +103,13 @@ export default function ParaPedreirosPage() {
           <div>
             <p className="font-display text-3xl font-black text-accent-dark">1 serviço</p>
             <p className="mt-1 text-sm text-ink-soft">
-              Um reboco de 40 m² fecha por R$ 1.200+ em qualquer capital. É o preço de meses de assinatura.
+              Avalie o valor de cada oportunidade para seu negócio. A assinatura não garante faturamento nem contratação.
             </p>
           </div>
           <div>
             <p className="font-display text-3xl font-black text-accent-dark">Exclusivo</p>
             <p className="mt-1 text-sm text-ink-soft">
-              Um número limitado de profissionais por cidade. Sem leilão, sem disputa com 30 concorrentes pelo mesmo cliente.
+              Um profissional por cidade. A vaga é reservada antes da emissão da assinatura para evitar cobranças concorrentes.
             </p>
           </div>
           <div>

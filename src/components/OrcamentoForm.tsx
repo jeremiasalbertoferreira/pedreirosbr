@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { jsPDF } from "jspdf";
-import { brlFmt } from "../lib/format";
+import { criarOrcamentoPdf } from "../lib/orcamento-pdf";
+const brlFmt = (value: number) => value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 interface Item {
   descricao: string;
@@ -37,7 +37,7 @@ export function OrcamentoForm({ dominio, ufs, cidades }: Props) {
 
   const cidadesDaUF = cidades.filter((c) => c.uf === ufSel);
   const cidadeNome = cidades.find((c) => c.slug === cidadeSel)?.nome ?? "";
-  const total = itens.reduce((s, i) => s + (i.quantidade || 0) * (i.valorUnitario || 0), 0);
+  const total = itens.filter(i => i.descricao.trim() && i.quantidade > 0 && i.valorUnitario >= 0).reduce((s, i) => s + Math.round(i.quantidade * i.valorUnitario * 100), 0) / 100;
 
   function setItem(idx: number, campo: keyof Item, valor: string) {
     setItens((arr) => arr.map((it, i) => {
@@ -56,85 +56,11 @@ export function OrcamentoForm({ dominio, ufs, cidades }: Props) {
   }
 
   async function gerarPdf() {
-    if (!profissional.trim()) { alert("Informe seu nome (ou empresa) para o cabeçalho do orçamento."); return; }
-    const itensValidos = itens.filter((i) => i.descricao.trim() && i.quantidade > 0);
-    if (itensValidos.length === 0) { alert("Adicione pelo menos um item com descrição."); return; }
-
-    const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const L = 15; // margem esquerda
-    let y = 20;
-
-    // Cabeçalho — a identidade é do profissional, não nossa
-    doc.setFontSize(20);
-    doc.setFont("helvetica", "bold");
-    doc.text(profissional, L, y);
-    y += 8;
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "normal");
-    if (zapProfissional.trim()) { doc.text(`WhatsApp: ${zapProfissional}`, L, y); y += 6; }
-    doc.text(`Data: ${new Date().toLocaleDateString("pt-BR")}   Validade: ${validade}`, L, y);
-    y += 10;
-
-    doc.setDrawColor(200, 200, 200);
-    doc.line(L, y, 195, y);
-    y += 10;
-
-    doc.setFontSize(14);
-    doc.setFont("helvetica", "bold");
-    doc.text("ORÇAMENTO", L, y);
-    y += 8;
-    doc.setFontSize(11);
-    doc.setFont("helvetica", "normal");
-    if (cliente.trim()) { doc.text(`Cliente: ${cliente}`, L, y); y += 6; }
-    if (cidadeNome) { doc.text(`Local: ${cidadeNome} - ${ufSel}`, L, y); y += 6; }
-    y += 4;
-
-    // Tabela de itens
-    doc.setFont("helvetica", "bold");
-    doc.text("Descrição", L, y);
-    doc.text("Qtd", 120, y);
-    doc.text("Unit.", 145, y);
-    doc.text("Total", 175, y);
-    y += 2;
-    doc.line(L, y, 195, y);
-    y += 6;
-    doc.setFont("helvetica", "normal");
-
-    for (const it of itensValidos) {
-      const linhas = doc.splitTextToSize(it.descricao, 95) as string[];
-      doc.text(linhas, L, y);
-      doc.text(`${it.quantidade} ${it.unidade}`, 120, y);
-      doc.text(brlFmt(it.valorUnitario), 145, y);
-      doc.text(brlFmt(it.quantidade * it.valorUnitario), 175, y);
-      y += Math.max(6, linhas.length * 5);
-      if (y > 255) { doc.addPage(); y = 20; }
-    }
-
-    y += 4;
-    doc.line(L, y, 195, y);
-    y += 8;
-    doc.setFontSize(13);
-    doc.setFont("helvetica", "bold");
-    doc.text(`TOTAL: ${brlFmt(total)}`, L, y);
-    y += 10;
-
-    if (obs.trim()) {
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      const linhasObs = doc.splitTextToSize(`Condições: ${obs}`, 180) as string[];
-      doc.text(linhasObs, L, y);
-      y += linhasObs.length * 5 + 4;
-    }
-
-    // Rodapé viral — discreto, em toda página
-    const paginas = doc.getNumberOfPages();
-    for (let p = 1; p <= paginas; p++) {
-      doc.setPage(p);
-      doc.setFontSize(8);
-      doc.setTextColor(140, 140, 140);
-      doc.text(`Orçamento feito com ${dominio} — encontre pedreiros na sua região`, L, 290);
-    }
-
+    let doc;
+    try {
+      doc = criarOrcamentoPdf({ profissional, whatsapp: zapProfissional, cliente,
+        local: cidadeNome ? `${cidadeNome} - ${ufSel}` : "", validade, obs, dominio, itens }).doc;
+    } catch (error) { alert(error instanceof Error ? error.message : "Confira os itens do orçamento."); return; }
     doc.save(`orcamento-${profissional.toLowerCase().replace(/\s+/g, "-").slice(0, 30)}.pdf`);
     setGerado(true);
 
@@ -194,8 +120,8 @@ export function OrcamentoForm({ dominio, ufs, cidades }: Props) {
         <h2 className="text-lg font-bold text-neutral-900">Itens do orçamento</h2>
         <div className="mt-3 space-y-3">
           {itens.map((it, idx) => (
-            <div key={idx} className="grid grid-cols-[1fr_90px_80px_110px_36px] items-end gap-2">
-              <label className="block">
+            <div key={idx} className="grid grid-cols-2 items-end gap-2 rounded-xl border border-neutral-200 p-3 sm:grid-cols-[minmax(0,1fr)_75px_70px_100px_36px]">
+              <label className="col-span-2 block min-w-0 sm:col-span-1">
                 {idx === 0 && <span className="text-xs font-medium text-neutral-500">Descrição</span>}
                 <input className="mt-1 w-full rounded-lg border border-neutral-300 px-3 py-2" value={it.descricao} onChange={(e) => setItem(idx, "descricao", e.target.value)} placeholder="Ex.: Reboco de parede da sala" />
               </label>
@@ -217,7 +143,7 @@ export function OrcamentoForm({ dominio, ufs, cidades }: Props) {
             </div>
           ))}
         </div>
-        <div className="mt-4 flex items-center justify-between">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <button onClick={addItem} className="rounded-lg border border-orange-300 px-4 py-2 text-sm font-semibold text-orange-800 hover:bg-orange-50">+ Adicionar item</button>
           <p className="text-lg font-bold text-neutral-900">Total: {brlFmt(total)}</p>
         </div>

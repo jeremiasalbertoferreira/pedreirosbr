@@ -1,68 +1,23 @@
-/**
- * Distribuição de leads — a entrega do produto vendido.
- * Quando um lead novo chega numa cidade com assinante ativo, o lead vai
- * direto para o WhatsApp dele. Regra LGPD rígida: SÓ distribui leads que
- * marcaram "quero receber orçamentos de profissionais" (consentimento).
- */
 import { prisma } from "./db";
 import { getCidade } from "./data/cidades";
-import { enviarNovoLead, whatsappConfigurado } from "./whatsapp";
 
-export interface ResultadoDistribuicao {
-  distribuido: boolean;
-  assinanteNome?: string;
-  motivo?: string;
-}
-
-/**
- * Entrega o lead ao assinante da cidade.
- * Hoje: 1º assinante ativo por ordem de entrada (exclusividade real).
- * Futuro: round-robin se a cidade tiver mais de um assinante.
- */
-export async function distribuirLead(opts: {
-  leadId: string;
-  territorySlug: string;
-  servico: string;
-  resumo?: string;
-  whatsappCliente: string;
-}): Promise<ResultadoDistribuicao> {
-  try {
-    const assinante = await prisma.professional.findFirst({
-      where: { territorySlug: opts.territorySlug, status: "assinante" },
-      orderBy: { createdAt: "asc" },
-    });
-    if (!assinante) return { distribuido: false, motivo: "sem_assinante" };
-
-    const cidade = getCidade(opts.territorySlug);
-    const cidadeLabel = cidade ? `${cidade.nome}/${cidade.uf}` : opts.territorySlug;
-    const servicoResumo = opts.resumo ?? opts.servico;
-
-    if (!whatsappConfigurado()) {
-      // WhatsApp ainda não configurado: marca como distribuído no banco para o
-      // envio manual/backfill, mas a entrega automática só existe com a Meta ativa.
-      await prisma.lead.update({ where: { id: opts.leadId }, data: { distribuido: true } });
-      console.warn(`[distribuicao] lead ${opts.leadId} marcado p/ ${assinante.nome} (whatsapp nao configurado)`);
-      return { distribuido: false, assinanteNome: assinante.nome, motivo: "whatsapp_nao_configurado" };
-    }
-
-    const envio = await enviarNovoLead(assinante.whatsapp, cidadeLabel, servicoResumo, opts.whatsappCliente);
-    if (!envio.ok) {
-      console.error(`[distribuicao] falha ao entregar lead ${opts.leadId} p/ ${assinante.nome}:`, envio.motivo);
-      return { distribuido: false, assinanteNome: assinante.nome, motivo: envio.motivo };
-    }
-
-    await prisma.lead.update({ where: { id: opts.leadId }, data: { distribuido: true } });
-    await prisma.territoryEvent.create({
-      data: {
-        territorySlug: opts.territorySlug,
-        tipo: "lead",
-        meta: { acao: "distribuido", assinante: assinante.nome, servico: opts.servico },
+export async function distribuirLead(opts: { leadId: string }) {
+  const lead = await prisma.lead.findUniqueOrThrow({ where: { id: opts.leadId } });
+  if (!lead.verifiedAt || !lead.consentAt) return { distribuido: false, motivo: "sem_consentimento_confirmado" };
+  const seat = await prisma.territorySeat.findUnique({ where: { territorySlug: lead.territorySlug } });
+  if (!seat) return { distribuido: false, motivo: "sem_assinante" };
+  const professional = await prisma.professional.findUnique({ where: { id: seat.professionalId } });
+  if (!professional?.verifiedAt || professional.status !== "assinante") return { distribuido: false, motivo: "sem_assinante" };
+  const city = getCidade(lead.territorySlug);
+  const snapshot = lead.resultado as { summary?: string } | null;
+  await prisma.$transaction(async tx => {
+    await tx.outboundMessage.upsert({ where: { key: `lead:${lead.id}` }, create: {
+      key: `lead:${lead.id}`, recipient: professional.whatsapp, kind: "LEAD", payload: {
+        leadId: lead.id, professionalId: professional.id, city: city ? `${city.nome}/${city.uf}` : lead.territorySlug,
+        summary: snapshot?.summary ?? lead.servico, phone: lead.whatsapp,
       },
-    });
-    console.log(`[distribuicao] lead ${opts.leadId} → ${assinante.nome} (${cidadeLabel})`);
-    return { distribuido: true, assinanteNome: assinante.nome };
-  } catch (err) {
-    console.error("[distribuicao] erro (ignorado):", err);
-    return { distribuido: false, motivo: "erro" };
-  }
+    }, update: {} });
+    if (!lead.distribuido) await tx.lead.update({ where: { id: lead.id }, data: { deliveryState: "QUEUED" } });
+  });
+  return { distribuido: lead.distribuido, motivo: "enfileirado" };
 }

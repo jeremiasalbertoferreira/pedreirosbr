@@ -11,7 +11,6 @@ import {
 import { WhatsappCapture } from "./WhatsappCapture";
 import { brlFmt } from "../lib/format";
 
-const ENGINES = { reboco: calcReboco, muro: calcMuro, pintura: calcPintura, telhado: calcTelhado, banheiro: calcBanheiro };
 
 const inputCls =
   "mt-1.5 w-full rounded-xl border border-ink/15 bg-paper px-4 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20";
@@ -35,6 +34,7 @@ export function Calculadora({ servico, ufs, cidades, ufInicial, cidadeInicial }:
   const [cidadeSel, setCidadeSel] = useState(cidadeInicial ?? "");
   const [resultado, setResultado] = useState<ResultadoCalc | null>(null);
   const [calculando, setCalculando] = useState(false);
+  const [erro, setErro] = useState("");
 
   const cidadesDaUF = useMemo(() => cidades.filter((c) => c.uf === ufSel), [cidades, ufSel]);
   const ufData = ufs.find((u) => u.uf === ufSel) ?? ufs[0];
@@ -43,6 +43,14 @@ export function Calculadora({ servico, ufs, cidades, ufInicial, cidadeInicial }:
     : { slug: `uf-${ufSel.toLowerCase()}`, nome: ufData.nome, uf: ufSel };
 
   function calcular() {
+    for (const campo of servico.campos.filter(c => c.tipo === "numero")) {
+      const value = Number(valores[campo.id]);
+      if (!Number.isFinite(value) || value < (campo.min ?? 0.01) || value > (campo.max ?? 1000000)) {
+        setErro(`Confira ${campo.label.toLowerCase()}: informe um valor entre ${campo.min ?? 0.01} e ${campo.max ?? 1000000}.`);
+        setResultado(null); return;
+      }
+    }
+    setErro("");
     setCalculando(true);
     const num = (id: string) => Number(valores[id]) || 0;
     const fator = (id: string) => {
@@ -77,13 +85,13 @@ export function Calculadora({ servico, ufs, cidades, ufInicial, cidadeInicial }:
         <div className="grid gap-5 sm:grid-cols-2">
           <label className="block">
             <span className={labelCls}>Estado</span>
-            <select className={inputCls} value={ufSel} onChange={(e) => { setUfSel(e.target.value); setCidadeSel(""); }}>
+            <select className={inputCls} value={ufSel} onChange={(e) => { setUfSel(e.target.value); setCidadeSel(""); setResultado(null); }}>
               {ufs.map((u) => <option key={u.uf} value={u.uf}>{u.nome}</option>)}
             </select>
           </label>
           <label className="block">
             <span className={labelCls}>Cidade <span className="font-normal text-ink-soft">(opcional)</span></span>
-            <select className={inputCls} value={cidadeSel} onChange={(e) => setCidadeSel(e.target.value)}>
+            <select className={inputCls} value={cidadeSel} onChange={(e) => { setCidadeSel(e.target.value); setResultado(null); }}>
               <option value="">— média do estado —</option>
               {cidadesDaUF.map((c) => <option key={c.slug} value={c.slug}>{c.nome}</option>)}
             </select>
@@ -96,13 +104,13 @@ export function Calculadora({ servico, ufs, cidades, ufInicial, cidadeInicial }:
                   type="number" min={c.min} max={c.max} step={c.passo ?? 1}
                   className={inputCls}
                   value={Number(valores[c.id])}
-                  onChange={(e) => setValores((v) => ({ ...v, [c.id]: Number(e.target.value) }))}
+                  onChange={(e) => { setValores((v) => ({ ...v, [c.id]: Number(e.target.value) })); setResultado(null); }}
                 />
               ) : (
                 <select
                   className={inputCls}
                   value={String(valores[c.id])}
-                  onChange={(e) => setValores((v) => ({ ...v, [c.id]: e.target.value }))}
+                  onChange={(e) => { setValores((v) => ({ ...v, [c.id]: e.target.value })); setResultado(null); }}
                 >
                   {c.opcoes?.map((o) => <option key={o.valor} value={o.valor}>{o.label}</option>)}
                 </select>
@@ -120,6 +128,7 @@ export function Calculadora({ servico, ufs, cidades, ufInicial, cidadeInicial }:
         >
           Calcular {servico.nome.toLowerCase()}
         </button>
+        {erro && <p role="alert" className="mt-3 text-red-700">{erro}</p>}
       </div>
 
       {resultado && (
@@ -157,7 +166,7 @@ export function Calculadora({ servico, ufs, cidades, ufInicial, cidadeInicial }:
             servico={servico}
             territorio={territorio}
             resumo={`${servico.nome} em ${territorio.nome}: ${brlFmt(resultado.totalMin)}–${brlFmt(resultado.totalMax)} (${resultado.areaEfetiva.toFixed(0)} m²)`}
-            resultadoSnapshot={{ totalMin: resultado.totalMin, totalMax: resultado.totalMax, area: resultado.areaEfetiva }}
+            resultadoSnapshot={{ totalMin: resultado.totalMin, totalMax: resultado.totalMax, area: resultado.areaEfetiva, materials: resultado.materiais.map(m => `${m.nome}: ${m.quantidade} ${m.unidade} — ${brlFmt(m.custoTotal)}`).join("\n") }}
           />
         </div>
       )}

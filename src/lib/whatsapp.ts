@@ -6,7 +6,7 @@
  * motivo "nao_configurado") — o site continua 100% funcional sem WhatsApp.
  *
  * Variáveis necessárias (Coolify > PedreirosBR > Environment Variables):
- *   WHATSAPP_TOKEN           — token permanente do usuário de sistema (Meta Business)
+ *   WHATSAPP_TOKEN           — token do usuário de sistema; respeitar validade/rotação
  *   WHATSAPP_PHONE_NUMBER_ID — ID do número registrado na Cloud API
  *   WHATSAPP_TEMPLATE_NAME   — opcional, default "resultado_calculadora_obra"
  *
@@ -49,6 +49,7 @@ async function enviarTemplate(
   try {
     const resp = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${phoneId}/messages`, {
       method: "POST",
+      signal: AbortSignal.timeout(10_000),
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
@@ -71,12 +72,12 @@ async function enviarTemplate(
     };
 
     if (!resp.ok) {
-      console.error("[whatsapp] falha Meta:", resp.status, JSON.stringify(data.error ?? data));
-      return { ok: false, motivo: data.error?.message ?? `http_${resp.status}` };
+      console.error("[whatsapp] falha Meta:", resp.status, data.error?.code);
+      return { ok: false, motivo: `http_${resp.status}` };
     }
     return { ok: true, messageId: data.messages?.[0]?.id };
-  } catch (err) {
-    console.error("[whatsapp] erro de rede:", err);
+  } catch {
+    console.error("[whatsapp] erro de rede");
     return { ok: false, motivo: "erro_rede" };
   }
 }
@@ -114,6 +115,7 @@ export async function enviarMensagemTexto(zap: string, texto: string): Promise<R
   try {
     const resp = await fetch(`https://graph.facebook.com/${GRAPH_VERSION}/${phoneId}/messages`, {
       method: "POST",
+      signal: AbortSignal.timeout(10_000),
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
@@ -128,15 +130,15 @@ export async function enviarMensagemTexto(zap: string, texto: string): Promise<R
 
     const data = (await resp.json().catch(() => ({}))) as {
       messages?: { id: string }[];
-      error?: { message?: string };
+      error?: { message?: string; code?: number };
     };
     if (!resp.ok) {
-      console.error("[whatsapp] falha texto Meta:", resp.status, JSON.stringify(data.error ?? data));
-      return { ok: false, motivo: data.error?.message ?? `http_${resp.status}` };
+      console.error("[whatsapp] falha texto Meta:", resp.status, data.error?.code);
+      return { ok: false, motivo: `http_${resp.status}` };
     }
     return { ok: true, messageId: data.messages?.[0]?.id };
-  } catch (err) {
-    console.error("[whatsapp] erro de rede (texto):", err);
+  } catch {
+    console.error("[whatsapp] erro de rede (texto)");
     return { ok: false, motivo: "erro_rede" };
   }
 }

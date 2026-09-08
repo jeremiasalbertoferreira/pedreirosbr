@@ -70,7 +70,7 @@ export async function registrarEvento(opts: {
     }
 
     // Limiar 2: fase 2 desperta — demanda comprovada, organismo oferece assinatura
-    if (!territory.assinaturaAtiva && territory.leads >= oficio.limiares.assinaturaPorTerritorio) {
+    if (opts.tipo === "lead" && !territory.assinaturaAtiva && territory.leads >= oficio.limiares.assinaturaPorTerritorio) {
       await prisma.territory.update({
         where: { slug: opts.territorySlug },
         data: { assinaturaAtiva: true },

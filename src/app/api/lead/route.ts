@@ -1,87 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../lib/db";
-import { registrarEvento } from "../../../lib/organismo";
-import { enviarResultadoCalculadora } from "../../../lib/whatsapp";
-import { notificarFilaCidade } from "../../../lib/fila";
-import { distribuirLead } from "../../../lib/distribuicao";
-
-function soDigitos(s: string): string {
-  return s.replace(/\D/g, "");
-}
+import { getCidade } from "../../../lib/data/cidades";
+import { UFS } from "../../../lib/data/ufs";
+import { getOficioAtivo } from "../../../oficios";
+import { corpoPublico, limitar, normalizarWhatsApp, CONSENT_VERSION } from "../../../lib/public-request";
+import { criarVerificacao } from "../../../lib/verification";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { servico, descricao, territorySlug, nomeTerritorio, uf, whatsapp, origem, resultado, resumo } = body ?? {};
-
-    const zap = soDigitos(String(whatsapp ?? ""));
-    if (!servico || !territorySlug || !uf || zap.length < 10 || zap.length > 13) {
-      return NextResponse.json({ ok: false, error: "dados incompletos ou WhatsApp inválido" }, { status: 400 });
+    const body = await corpoPublico(req);
+    const whatsapp = normalizarWhatsApp(body.whatsapp);
+    const city = typeof body.territorySlug === "string" ? getCidade(body.territorySlug) : undefined;
+    const uf = UFS.find(u => u.uf === body.uf);
+    const service = getOficioAtivo().servicos.find(s => s.slug === body.servico);
+    if (!whatsapp || !uf || !service || (!city && body.territorySlug !== `uf-${uf.uf.toLowerCase()}`) ||
+        (city && city.uf !== uf.uf) || (body.quoteConsent === true && !city) || body.consentVersion !== CONSENT_VERSION) {
+      return NextResponse.json({ ok: false, error: "Confira o telefone e a região. Para pedir orçamento, selecione uma cidade." }, { status: 400 });
     }
-
-    const lead = await prisma.lead.create({
-      data: {
-        servico: String(servico).slice(0, 60),
-        descricao: descricao ? String(descricao).slice(0, 500) : null,
-        territorySlug: String(territorySlug).slice(0, 120),
-        whatsapp: zap,
-        origem: String(origem ?? "calculadora").slice(0, 40),
-        resultado: resultado ? JSON.parse(JSON.stringify(resultado)) : undefined,
-      },
-    });
-
-    const r = await registrarEvento({
-      territorySlug: String(territorySlug).slice(0, 120),
-      nomeTerritorio: String(nomeTerritorio ?? territorySlug).slice(0, 120),
-      uf: String(uf).slice(0, 2),
-      tipo: "lead",
-      servico: String(servico).slice(0, 60),
-    });
-
-    // Envio do resultado no WhatsApp (Meta Cloud API).
-    // No-op silencioso se WHATSAPP_TOKEN/WHATSAPP_PHONE_NUMBER_ID não estiverem
-    // configurados — o lead já está salvo, que é o que importa.
-    let whatsappEnviado = false;
-    if (resumo) {
-      const regiao = `${String(nomeTerritorio ?? territorySlug)}/${String(uf).toUpperCase()}`;
-      const envio = await enviarResultadoCalculadora(zap, String(resumo), regiao);
-      whatsappEnviado = envio.ok;
-      if (!envio.ok && envio.motivo !== "nao_configurado") {
-        console.warn("[api/lead] whatsapp não enviado:", envio.motivo);
-      }
-    }
-
-    // Gatilho da fase 2: a cidade acabou de despertar (limiar de leads cruzado
-    // neste exato request) → chama os primeiros da fila de pedreiros dela.
-    let filaNotificada = 0;
-    if (r.assinaturaDespertou) {
-      try {
-        const despertar = await notificarFilaCidade(String(territorySlug).slice(0, 120));
-        filaNotificada = despertar.convidados;
-        if (!despertar.ok) console.warn("[api/lead] despertar sem convites:", despertar.motivo);
-      } catch (err) {
-        console.error("[api/lead] falha ao notificar fila (ignorada):", err);
-      }
-    }
-
-    // Distribuição — a entrega do produto: lead novo em cidade com assinante
-    // vai direto pro WhatsApp dele. REGRA LGPD: só distribui quem marcou
-    // "quero receber orçamentos de profissionais" (descricao presente).
-    let leadDistribuido = false;
-    if (descricao) {
-      const dist = await distribuirLead({
-        leadId: lead.id,
-        territorySlug: String(territorySlug).slice(0, 120),
-        servico: String(servico).slice(0, 60),
-        resumo: resumo ? String(resumo) : undefined,
-        whatsappCliente: zap,
-      });
-      leadDistribuido = dist.distribuido;
-    }
-
-    return NextResponse.json({ ok: true, whatsappEnviado, filaNotificada, leadDistribuido, ...r });
-  } catch (err) {
-    console.error("[api/lead]", err);
-    return NextResponse.json({ ok: false }, { status: 500 });
+    if (!await limitar(`lead:${whatsapp}`)) return NextResponse.json({ ok: false, error: "Muitas tentativas. Aguarde uma hora." }, { status: 429 });
+    const summary = String(body.resumo ?? service.nome).slice(0, 700);
+    const materials = String(body.materials ?? "").slice(0, 2300);
+    const lead = await prisma.lead.create({ data: {
+      servico: service.slug, territorySlug: city?.slug ?? `uf-${uf.uf.toLowerCase()}`, whatsapp, origem: "calculadora",
+      descricao: body.quoteConsent === true ? summary : null,
+      consentAt: body.quoteConsent === true ? new Date() : null, consentVersion: CONSENT_VERSION,
+      resultado: { summary, materials },
+    } });
+    const verificationUrl = await criarVerificacao("LEAD", whatsapp, { leadId: lead.id, summary, materials, city: city?.nome ?? uf.nome, uf: uf.uf });
+    return NextResponse.json({ ok: true, verificationUrl, whatsappEnviado: false });
+  } catch {
+    return NextResponse.json({ ok: false, error: "Não foi possível preparar sua solicitação." }, { status: 400 });
   }
 }

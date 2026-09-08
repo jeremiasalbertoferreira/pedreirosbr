@@ -34,6 +34,8 @@ function item(nome: string, quantidade: number, unidade: string, custoUnitario: 
 }
 
 function finalize(materiais: ItemMaterial[], maoDeObraM2: number, areaEfetiva: number, uf: UFData, observacoes: string[]): ResultadoCalc {
+  if (!Number.isFinite(areaEfetiva) || areaEfetiva <= 0 || !Number.isFinite(maoDeObraM2) || maoDeObraM2 <= 0 ||
+      materiais.some(m => !Number.isFinite(m.custoTotal) || m.quantidade < 0 || m.custoTotal < 0)) throw new Error("Medidas inválidas para cálculo.");
   const custoMateriais = brl(materiais.reduce((s, m) => s + m.custoTotal, 0));
   const moM2Regional = brl(maoDeObraM2 * uf.multiplicadorMaoDeObra);
   const custoMaoDeObra = brl(moM2Regional * areaEfetiva);
@@ -46,7 +48,7 @@ function finalize(materiais: ItemMaterial[], maoDeObraM2: number, areaEfetiva: n
     totalMin: brl(total * 0.9),
     totalMax: brl(total * 1.15),
     areaEfetiva,
-    observacoes,
+    observacoes: [...observacoes, "Simulação preliminar por estado, sem cotação local. Confira quantitativos e dimensionamento com um profissional antes de comprar ou executar."],
   };
 }
 
@@ -60,8 +62,8 @@ export function calcReboco(area: number, fatorAcabamento: number, uf: UFData): R
     item("Aditivo/impermeabilizante", area * 0.05, "L", 18 * fatorMaterial),
   ];
   return finalize(materiais, 32 * fatorAcabamento, area, uf, [
-    "Traço considerado: 1:2:8 (cimento, cal, areia), espessura 2 cm.",
-    "Parede de alvenaria nova consome ~5% a mais que alvenaria antiga.",
+    "Coeficientes de consumo preliminares; não representam memória de cálculo de um traço de argamassa homologado.",
+    "Espessura, preparação e condições da parede podem alterar significativamente o consumo.",
   ]);
 }
 
@@ -103,9 +105,9 @@ export function calcPintura(area: number, demaos: number, fatorTipo: number, uf:
   ]);
 }
 
-/** Telhado: área × 1,35 (inclinação média). M.O. base R$ 45/m² efetivo. */
+/** Telhado: projeção horizontal × sqrt(1 + 0,35²); sem beirais/perdas adicionais. */
 export function calcTelhado(areaPlanta: number, fatorTelha: number, uf: UFData): ResultadoCalc {
-  const area = Math.round(areaPlanta * 1.35 * 100) / 100;
+  const area = Math.round(areaPlanta * Math.sqrt(1 + 0.35 ** 2) * 100) / 100;
   const fm = 1 + (uf.cub - 1840) / 1840 * 0.5;
   const telha = fatorTelha < 0.9 ? "Telha fibrocimento 6mm" : fatorTelha > 1.1 ? "Telha metálica/sanduíche" : "Telha cerâmica";
   const qtdTelha = fatorTelha < 0.9 ? area / 1.68 : fatorTelha > 1.1 ? area / 0.95 : area * 16;
@@ -117,6 +119,7 @@ export function calcTelhado(areaPlanta: number, fatorTelha: number, uf: UFData):
   ];
   return finalize(materiais, 45 * (0.85 + fatorTelha * 0.15), area, uf, [
     `Área de telhado com inclinação média (35%): ${area.toFixed(0)} m².`,
+    "A área informada é a projeção horizontal; beirais e perdas devem ser medidos à parte.",
     "Estrutura considerada em madeira; estrutura metálica altera o custo.",
   ]);
 }

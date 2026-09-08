@@ -10,11 +10,7 @@ interface Props {
 }
 
 interface Resultado {
-  posicao: number;
-  cidadeQuente: boolean;
-  cidadeNome: string;
-  uf: string;
-  recadastro: boolean;
+  verificationUrl: string;
 }
 
 /**
@@ -24,7 +20,7 @@ interface Resultado {
 export function CadastroProfissional({ ufs, cidades }: Props) {
   const [nome, setNome] = useState("");
   const [zap, setZap] = useState("");
-  const [cpf, setCpf] = useState("");
+  const [consent, setConsent] = useState(false);
   const [uf, setUf] = useState("SP");
   const [cidadeSlug, setCidadeSlug] = useState("");
   const [enviando, setEnviando] = useState(false);
@@ -38,13 +34,10 @@ export function CadastroProfissional({ ufs, cidades }: Props) {
 
   async function enviar() {
     const digitos = zap.replace(/\D/g, "");
-    const cpfDigitos = cpf.replace(/\D/g, "");
     if (nome.trim().length < 2) { setErro("Digite seu nome."); return; }
     if (digitos.length < 10) { setErro("Digite um WhatsApp válido com DDD."); return; }
     if (!cidadeSlug) { setErro("Escolha a cidade onde você trabalha."); return; }
-    if (cpfDigitos && cpfDigitos.length !== 11 && cpfDigitos.length !== 14) {
-      setErro("CPF deve ter 11 dígitos (ou CNPJ com 14)."); return;
-    }
+    if (!consent) { setErro("Confirme os termos para continuar."); return; }
     setErro("");
     setEnviando(true);
     try {
@@ -53,7 +46,7 @@ export function CadastroProfissional({ ufs, cidades }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           nome: nome.trim(), whatsapp: digitos, territorySlug: cidadeSlug, uf,
-          ...(cpfDigitos ? { cpf: cpfDigitos } : {}),
+          consent, consentVersion: "2026-09-08",
         }),
       });
       const data = await resp.json();
@@ -72,18 +65,15 @@ export function CadastroProfissional({ ufs, cidades }: Props) {
   if (resultado) {
     return (
       <div className="rounded-2xl border-2 border-green-600/30 bg-green-50 p-6 sm:p-8">
-        <p className="font-display text-2xl font-black text-green-900">Você está na fila! 🎉</p>
+        <p className="font-display text-2xl font-black text-green-900">Falta confirmar seu WhatsApp</p>
         <p className="mt-2 text-green-900/80">
-          <strong>Posição {resultado.posicao}</strong> em {resultado.cidadeNome}/{resultado.uf}.
-          {resultado.cidadeQuente
-            ? " Essa cidade já está quente — clientes chegando! Fique de olho no seu WhatsApp: vamos te chamar para assumir o território."
-            : " Assim que a procura por pedreiro aí esquentar, você recebe um aviso no seu WhatsApp — os primeiros da fila têm prioridade para assumir a cidade."}
+          Abra o WhatsApp e envie a mensagem de confirmação sem alterar o código. Só então seu cadastro será concluído. O link vale por 30 minutos.
         </p>
         <p className="mt-3 text-sm text-green-900/60">
           Enquanto isso, use o gerador de orçamento em PDF grátis e mande orçamentos profissionais pros seus clientes.
         </p>
-        <a href="/orcamento" className="mt-4 inline-block rounded-xl bg-green-700 px-6 py-3 font-display font-bold text-white hover:bg-green-800">
-          Gerar orçamento grátis
+        <a href={resultado.verificationUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block rounded-xl bg-green-700 px-6 py-3 font-display font-bold text-white hover:bg-green-800">
+          Confirmar no WhatsApp
         </a>
       </div>
     );
@@ -99,6 +89,7 @@ export function CadastroProfissional({ ufs, cidades }: Props) {
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
         <input
           type="text"
+          aria-label="Seu nome"
           placeholder="Seu nome"
           className="rounded-xl border border-paper/20 bg-paper/10 px-4 py-3 text-paper placeholder:text-paper/40 outline-none focus:border-accent"
           value={nome}
@@ -106,20 +97,14 @@ export function CadastroProfissional({ ufs, cidades }: Props) {
         />
         <input
           type="tel"
+          aria-label="Seu WhatsApp com DDD"
           placeholder="Seu WhatsApp com DDD"
           className="rounded-xl border border-paper/20 bg-paper/10 px-4 py-3 text-paper placeholder:text-paper/40 outline-none focus:border-accent"
           value={zap}
           onChange={(e) => setZap(e.target.value)}
         />
-        <input
-          type="text"
-          inputMode="numeric"
-          placeholder="CPF (opcional — só p/ cobrança futura)"
-          className="rounded-xl border border-paper/20 bg-paper/10 px-4 py-3 text-paper placeholder:text-paper/40 outline-none focus:border-accent"
-          value={cpf}
-          onChange={(e) => setCpf(e.target.value)}
-        />
         <select
+          aria-label="Estado onde trabalha"
           className="rounded-xl border border-paper/20 bg-paper/10 px-4 py-3 text-paper outline-none focus:border-accent"
           value={uf}
           onChange={(e) => { setUf(e.target.value); setCidadeSlug(""); }}
@@ -129,6 +114,7 @@ export function CadastroProfissional({ ufs, cidades }: Props) {
           ))}
         </select>
         <select
+          aria-label="Cidade onde trabalha"
           className="rounded-xl border border-paper/20 bg-paper/10 px-4 py-3 text-paper outline-none focus:border-accent"
           value={cidadeSlug}
           onChange={(e) => setCidadeSlug(e.target.value)}
@@ -139,9 +125,13 @@ export function CadastroProfissional({ ufs, cidades }: Props) {
           ))}
         </select>
       </div>
+      <label className="mt-4 flex items-start gap-3 text-sm text-paper/90">
+        <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} className="mt-1" />
+        <span>Li os <a className="underline" href="/termos">termos</a> e a <a className="underline" href="/politica-de-privacidade">política de privacidade</a>. Quero receber pelo WhatsApp confirmações e a oferta da vaga na minha cidade. Entrar na fila é grátis; assinatura de R$ 97/mês apenas após minha confirmação.</span>
+      </label>
       <button
         onClick={enviar}
-        disabled={enviando}
+        disabled={enviando || !consent}
         className="mt-4 w-full rounded-xl bg-accent px-6 py-3.5 font-display text-lg font-bold text-white shadow-[0_4px_0_0_#9A3412] transition hover:translate-y-0.5 hover:shadow-none disabled:opacity-60"
       >
         {enviando ? "Entrando na fila…" : "Entrar na fila da minha cidade"}

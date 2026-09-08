@@ -43,7 +43,7 @@ export default function QuantoCobrarPage() {
         <p className="mt-3 max-w-2xl text-lg text-neutral-600">
           A regra de ouro: <strong>material não é seu lucro</strong>. Some o custo do material, aplique sua mão de
           obra por m² (referência do seu estado abaixo) e adicione 10–20% de margem para imprevistos.
-          Nunca cobre "por fora" — quem fecha preço sem calcular trabalha de graça sem saber.
+          Nunca cobre &quot;por fora&quot; — quem fecha preço sem calcular trabalha de graça sem saber.
         </p>
       </div>
 

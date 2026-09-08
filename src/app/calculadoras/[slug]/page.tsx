@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getOficioAtivo, SITE_URL } from "../../../oficios";
-import { UFS, getUF } from "../../../lib/data/ufs";
+import { UFS } from "../../../lib/data/ufs";
 import { CIDADES } from "../../../lib/data/cidades";
 import { Calculadora } from "../../../components/Calculadora";
 import { JsonLd } from "../../../components/JsonLd";
@@ -67,7 +67,7 @@ export default async function CalculadoraPage({ params }: { params: Promise<{ sl
         <h1 className="text-3xl font-extrabold text-neutral-900">{servico.perguntaCliente}</h1>
         <p className="mt-2 text-neutral-600">
           Calcule materiais e mão de obra de {servico.nome.toLowerCase()} com preços regionalizados por estado.
-          Resultado detalhado no seu WhatsApp, grátis e sem cadastro.
+          Consulte grátis na página ou confirme seu número para receber o resultado no WhatsApp.
         </p>
       </div>
 
@@ -78,10 +78,9 @@ export default async function CalculadoraPage({ params }: { params: Promise<{ sl
       <section className="rounded-xl bg-white p-6">
         <h2 className="text-lg font-bold text-neutral-900">Preço de referência no seu estado</h2>
         <p className="mt-2 text-sm text-neutral-600">
-          Nossas estimativas usam como ponte o CUB (Custo Unitário Básico) publicado mensalmente pelos Sinduscons
-          de cada estado, combinado com padrões de consumo de obra. Em {getUF("SP").nome}, por exemplo, o CUB de
-          referência está em torno de R$ {getUF("SP").cub}/m². Conforme orçamentos reais são feitos pela plataforma,
-          os preços da sua cidade ficam cada vez mais precisos.
+          Os valores são calculados com fatores internos por estado e coeficientes preliminares de consumo.
+          Não há consulta em tempo real a fornecedores nem levantamento comprovado de preços por cidade.
+          Use a simulação para planejamento inicial e confirme preços, quantidades e condições da obra antes de contratar.
         </p>
       </section>
 

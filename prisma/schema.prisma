@@ -56,6 +56,10 @@ model Lead {
   resultado   Json?    // snapshot do cálculo que originou o lead
   distribuido Boolean  @default(false)
   createdAt   DateTime @default(now())
+  verifiedAt DateTime?
+  consentAt DateTime?
+  consentVersion String?
+  deliveryState String @default("PENDING_VERIFICATION")
 
   @@index([territorySlug, createdAt])
 }
@@ -75,4 +79,80 @@ model Professional {
   avaliacoes   Int     @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  billing     BillingSubscription?
+  verifiedAt DateTime?
+  consentAt DateTime?
+  consentVersion String?
+}
+
+model VerificationRequest {
+  tokenHash String @id
+  kind String
+  whatsapp String
+  data Json
+  expiresAt DateTime
+  consumedAt DateTime?
+  createdAt DateTime @default(now())
+  @@index([whatsapp, createdAt])
+}
+
+model TerritorySeat {
+  territorySlug String @id
+  professionalId String @unique
+  createdAt DateTime @default(now())
+}
+
+model OutboundMessage {
+  key String @id
+  recipient String
+  kind String // TEXT | LEAD | INVITE
+  payload Json
+  state String @default("PENDING") // PENDING | SENDING | SENT | DELIVERED | REVIEW
+  messageId String? @unique
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([state, nextAttemptAt])
+}
+
+model RequestLimit {
+  key String @id
+  count Int @default(1)
+  expiresAt DateTime
+}
+
+// Callbacks podem chegar antes de a resposta do POST de envio ser persistida.
+model MessageDelivery {
+  messageId String @id
+  state String // DELIVERED | FAILED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([createdAt])
+}
+
+/// Registro durável anterior a qualquer POST financeiro. Nunca apagar para tentar novamente.
+model BillingSubscription {
+  professionalId String @id
+  professional Professional @relation(fields: [professionalId], references: [id], onDelete: Restrict)
+  territorySlug String
+  environment String
+  state String @default("CREATING") // CREATING | READY | REVIEW | CANCELLED
+  customerId String?
+  subscriptionId String? @unique
+  activePaymentId String?
+  lastEventCreated String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Sem conteúdo de mensagem, CPF ou token. PROCESSING abandonado requer reconciliação.
+model WebhookReceipt {
+  provider String
+  eventId String
+  state String @default("PROCESSING") // PROCESSING | FAILED | DONE
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@id([provider, eventId])
+  @@index([state, updatedAt])
 }

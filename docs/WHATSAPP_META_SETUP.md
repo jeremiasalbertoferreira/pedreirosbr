@@ -1,5 +1,12 @@
 # WhatsApp do PedreirosBR — Setup da Meta Cloud API
 
+> **Atualização de segurança — 08/09/2026:** o procedimento histórico abaixo não autoriza ativação direta.
+> Leia primeiro [WHATSAPP_SEGURANCA.md](./WHATSAPP_SEGURANCA.md). São obrigatórios o segredo do app,
+> a migration `0003_webhook_billing_safety` e a validação isolada. A cobrança automática agora fica
+> desligada por padrão (`ASAAS_BILLING_ENABLED=false`) e exige ambiente explícito. Token pode expirar
+> ou ser revogado; o token criado para PedreirosBR nesta configuração tem validade de 60 dias.
+> Preços, categorias de modelos e limites mencionados neste guia histórico precisam ser reconferidos na Meta.
+
 Guia completo para ativar o envio automático do resultado da calculadora
 no WhatsApp de cada lead. O código já está pronto (`src/lib/whatsapp.ts`);
 falta apenas criar os recursos na Meta e colar 2 variáveis no Coolify.
