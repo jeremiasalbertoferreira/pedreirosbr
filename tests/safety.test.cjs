@@ -162,6 +162,18 @@ test('callback antecipado é reconciliado após envio e falha posterior não reg
   await registrarEntregas(delivery('outbound-test-1','failed'));
   assert.equal((await prisma.outboundMessage.findUnique({where:{key:'early'}})).state,'DELIVERED');
 });
+test('outbox usa relógio do banco e preserva mensagens agendadas para o futuro', async () => {
+  const {processarOutbox}=require('../src/lib/outbox.ts');
+  await prisma.outboundMessage.create({data:{key:'due',recipient:'5511900000002',kind:'TEXT',payload:{text:'Agora'}}});
+  await prisma.outboundMessage.create({data:{key:'future',recipient:'5511900000002',kind:'TEXT',payload:{text:'Depois'},nextAttemptAt:new Date(Date.now()+3600000)}});
+  const RealDate=Date;
+  const behind=RealDate.now()-3600000;
+  global.Date=class extends RealDate { constructor(...args){super(...(args.length?args:[behind]));} static now(){return behind;} };
+  try { assert.equal((await processarOutbox()).processed,1); } finally { global.Date=RealDate; }
+  assert.equal((await prisma.outboundMessage.findUnique({where:{key:'due'}})).state,'SENT');
+  assert.equal((await prisma.outboundMessage.findUnique({where:{key:'future'}})).state,'PENDING');
+  assert.equal(calls.length,1);
+});
 test('lead só é distribuído após callback; cancelamento antes do envio bloqueia entrega', async () => {
   const {distribuirLead}=require('../src/lib/distribuicao.ts');
   const {processarOutbox,registrarEntregas}=require('../src/lib/outbox.ts');

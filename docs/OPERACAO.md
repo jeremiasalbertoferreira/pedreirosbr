@@ -42,3 +42,12 @@ Falhas financeiras ambíguas permanecem em `CREATING`/`REVIEW`. Não apague esse
 Em 08/09/2026: 30 testes passaram, incluindo confirmação de titularidade, consentimento, concorrência na fila e reserva, duplicação de webhooks, callbacks fora de ordem e bloqueio de cobranças repetidas. O PDF de três páginas foi revisado visualmente e mostra centavos. A Meta confirmou a linha como `CONNECTED/CLOUD_API`; o usuário confirmou o recebimento do template de teste.
 
 Estas evidências não significam que pagamentos, operação comercial, cancelamento e todos os fluxos em produção já estejam homologados.
+
+## Atualização de segurança — 08/09/2026
+
+- Next.js e eslint-config-next atualizados para 16.3.4; sharp 0.35.4 e deepmerge-ts 8.0.0 fixados por override, com Prisma generate/migrate e testes de integração para verificar compatibilidade.
+- Dependências transitivas DOMPurify, nanoid, brace-expansion e js-yaml atualizadas dentro das versões compatíveis. Auditoria completa do lockfile: zero vulnerabilidades conhecidas naquele momento; isso não é garantia de ausência de falhas.
+- Boletins: https://github.com/advisories/GHSA-2xp9-vwfh-vxw4 e https://github.com/advisories/GHSA-ggr8-5vv4-36mx.
+- Outbox consulta o relógio UTC do PostgreSQL para selecionar mensagens vencidas. O 31º teste cobre relógio da aplicação atrasado e preservação de agendamentos futuros.
+- DATABASE_URL, ASAAS_API_KEY e ASAAS_WEBHOOK_TOKEN devem ser exclusivamente runtime no Coolify, assim como os segredos Meta. Build e Prisma generate foram validados sem DATABASE_URL.
+- Imagens e caches antigos podem conter argumentos de build legados. A correção da configuração não apaga cópias históricas; revisar acesso e rotacionar as credenciais afetadas de forma coordenada antes da ativação financeira.

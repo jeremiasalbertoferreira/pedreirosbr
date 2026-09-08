@@ -1,10 +1,17 @@
 import { prisma } from "./db";
+import type { OutboundMessage } from "@prisma/client";
 import { enviarMensagemTexto, enviarNovoLead, enviarConviteTerritorio, whatsappConfigurado } from "./whatsapp";
 
 /** Sem repetição cega após timeout: SENT tem ID, REVIEW exige conciliação. */
 export async function processarOutbox() {
   if (!whatsappConfigurado()) return { processed: 0 };
-  const pending = await prisma.outboundMessage.findMany({ where: { state: "PENDING", nextAttemptAt: { lte: new Date() } }, orderBy: { createdAt: "asc" }, take: 10 });
+  // Usar o relógio do banco em UTC (formato do Prisma) evita atrasos por
+  // arredondamento de milissegundos ou diferença de horário entre servidores.
+  const pending = await prisma.$queryRaw<OutboundMessage[]>`
+    SELECT * FROM "OutboundMessage"
+    WHERE state = 'PENDING' AND "nextAttemptAt" <= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::timestamp(3)
+    ORDER BY "createdAt" ASC LIMIT 10
+  `;
   let processed = 0;
   for (const job of pending) {
     const claimed = await prisma.outboundMessage.updateMany({ where: { key: job.key, state: "PENDING" }, data: { state: "SENDING", attempts: { increment: 1 } } });
