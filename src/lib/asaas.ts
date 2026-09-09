@@ -26,6 +26,61 @@ async function asaasFetch<T>(path: string, init: RequestInit): Promise<T> {
   return await resp.json() as T;
 }
 
+/** Exclusivamente pelo worker autenticado; habilitação separada e sem reenvio cego. */
+export async function processarInadimplencia() {
+  if (!asaasConfigurado() || process.env.ASAAS_OVERDUE_POLICY !== "pause_cancel_after_7_days" ||
+      process.env.ASAAS_OVERDUE_AUTOCANCEL_ENABLED !== "true") return { evaluated: 0 };
+  const cutoff = new Date(Date.now() - 7 * 86400000).toISOString();
+  const candidates = await prisma.billingSubscription.findMany({ where: {
+    state: "READY", environment: process.env.ASAAS_ENV, overdueSince: { lte: cutoff },
+    cancellationState: null, professional: { status: "inadimplente" },
+  }, orderBy: { overdueSince: "asc" }, take: 1 }); // Até três chamadas de 10s; respeitar timeout do worker.
+  let evaluated = 0;
+  for (const candidate of candidates) {
+    const billing = await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT "professionalId" FROM "BillingSubscription" WHERE "professionalId" = ${candidate.professionalId} FOR UPDATE`;
+      const b = await tx.billingSubscription.findUnique({ where: { professionalId: candidate.professionalId }, include: { professional: true } });
+      if (!b || b.state !== "READY" || b.environment !== process.env.ASAAS_ENV || b.cancellationState ||
+          !b.overdueSince || b.overdueSince > cutoff || b.activePaymentId || !b.latestPaymentId ||
+          !b.subscriptionId || !b.customerId || !b.professional.verifiedAt ||
+          b.professional.status !== "inadimplente" || b.professional.territorySlug !== b.territorySlug) return null;
+      await tx.billingSubscription.update({ where: { professionalId: b.professionalId }, data: {
+        cancellationState: "PROCESSING", cancellationRequestedAt: new Date(),
+      } });
+      return b;
+    });
+    if (!billing) continue;
+    evaluated++;
+    try {
+      // Confira a fatura no provedor, pois um pagamento pode ter webhook atrasado.
+      const payment = await asaasFetch<{ id?: string; customer?: string; subscription?: string; status?: string; dueDate?: string }>(
+        `/payments/${encodeURIComponent(billing.latestPaymentId!)}`, { method: "GET" });
+      if (payment.id !== billing.latestPaymentId || payment.customer !== billing.customerId ||
+          payment.subscription !== billing.subscriptionId || payment.status !== "OVERDUE" ||
+          payment.dueDate !== billing.latestPaymentDueDate) throw new Error("fatura_requer_reconciliacao");
+      const subscription = await asaasFetch<{ id?: string; customer?: string; externalReference?: string }>(
+        `/subscriptions/${encodeURIComponent(billing.subscriptionId!)}`, { method: "GET" });
+      if (subscription.id !== billing.subscriptionId || subscription.customer !== billing.customerId ||
+          subscription.externalReference !== billing.professionalId) throw new Error("assinatura_divergente");
+      // Se houve quitação local durante as consultas, não apagar a recorrência.
+      const stillOverdue = await prisma.billingSubscription.count({ where: {
+        professionalId: billing.professionalId, state: "READY", cancellationState: "PROCESSING",
+        latestPaymentId: billing.latestPaymentId, activePaymentId: null, overdueSince: billing.overdueSince,
+        professional: { status: "inadimplente" },
+      } });
+      if (!stillOverdue) throw new Error("estado_alterado");
+      const result = await asaasFetch<{ id?: string; deleted?: boolean }>(
+        `/subscriptions/${encodeURIComponent(billing.subscriptionId!)}`, { method: "DELETE" });
+      if (result.deleted !== true || (result.id && result.id !== billing.subscriptionId)) throw new Error("cancelamento_ambiguo");
+      await prisma.billingSubscription.updateMany({ where: { professionalId: billing.professionalId, state: "READY", cancellationState: "PROCESSING" }, data: { cancellationState: "SUBMITTED" } });
+      // A cidade só é liberada pelo webhook SUBSCRIPTION_DELETED autenticado.
+    } catch {
+      await prisma.billingSubscription.updateMany({ where: { professionalId: billing.professionalId, state: "READY", cancellationState: "PROCESSING" }, data: { cancellationState: "REVIEW" } });
+    }
+  }
+  return { evaluated };
+}
+
 export interface ResultadoCobranca {
   ok: boolean;
   link?: string;

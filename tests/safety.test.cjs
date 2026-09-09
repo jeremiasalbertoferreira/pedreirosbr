@@ -38,6 +38,7 @@ beforeEach(async () => {
   await prisma.territorySeat.deleteMany();
   await prisma.lead.deleteMany();
   await prisma.territory.deleteMany();
+  await prisma.billingPayment.deleteMany();
   await prisma.billingSubscription.deleteMany();
   await prisma.territoryEvent.deleteMany();
   await prisma.professional.deleteMany();
@@ -46,7 +47,8 @@ beforeEach(async () => {
   await prisma.territory.create({ data: { slug: 'sao-paulo-sp', nome: 'São Paulo', tipo: 'cidade', uf: 'SP', assinaturaAtiva: true } });
   Object.assign(process.env, { WHATSAPP_APP_SECRET: 'test-app-secret', WHATSAPP_PHONE_NUMBER_ID: 'test-phone',
     WHATSAPP_VERIFY_TOKEN: 'test-verify', WHATSAPP_TOKEN: 'test-token', WHATSAPP_BILLING_TEMPLATES_ENABLED: 'true', ASAAS_ENV: 'sandbox',
-    ASAAS_API_KEY: 'test-key', ASAAS_BILLING_ENABLED: 'true', ASAAS_WEBHOOK_TOKEN: 'test-webhook-token' });
+    ASAAS_API_KEY: 'test-key', ASAAS_BILLING_ENABLED: 'true', ASAAS_WEBHOOK_TOKEN: 'test-webhook-token',
+    ASAAS_OVERDUE_POLICY: 'pause_cancel_after_7_days', ASAAS_OVERDUE_AUTOCANCEL_ENABLED: 'false' });
   calls = []; mode = '';
   global.fetch = async (url, init) => {
     const u = new URL(url);
@@ -77,6 +79,12 @@ beforeEach(async () => {
     }
     if (u.pathname === '/v3/subscriptions/sub_test' && init.method === 'GET') {
       return json({ id: 'sub_test', customer: mode === 'cancel-mismatch' ? 'other' : 'cus_test', externalReference: billingOptions.professionalId });
+    }
+    if (u.pathname === '/v3/payments/pay_test' && init.method === 'GET') {
+      if (mode === 'overdue-fetch-failure') throw new Error('indisponivel');
+      if (mode === 'paid-during-check') await asaas.POST(asaasRequest('PAYMENT_RECEIVED', 'paid-during-check', '2026-09-10 12:00:00'));
+      return json({ id:'pay_test', customer: mode === 'overdue-wrong-owner' ? 'other' : 'cus_test',
+        subscription:'sub_test', dueDate:'2026-09-08', status:mode === 'overdue-already-paid' ? 'RECEIVED' : 'OVERDUE' });
     }
     if (u.pathname === '/v3/subscriptions/sub_test' && init.method === 'DELETE') {
       if (mode === 'cancel-timeout') throw new Error('timeout apos DELETE');
@@ -249,10 +257,125 @@ test('job interno exige token correto antes de executar', async () => {
 function asaasRequest(event, id, date = '2026-09-08 12:00:00', overrides = {}) {
   return new NextRequest('http://localhost/api/asaas/webhook', { method: 'POST', headers: { 'asaas-access-token': 'test-webhook-token' },
     body: JSON.stringify({ id, event, dateCreated: date,
-      payment: { id: 'pay_test', subscription: 'sub_test', customer: 'cus_test', externalReference: billingOptions.professionalId },
+      payment: { id: 'pay_test', subscription: 'sub_test', customer: 'cus_test', dueDate: '2026-09-08', externalReference: billingOptions.professionalId },
       subscription: { id: 'sub_test', customer: 'cus_test' }, ...overrides }) });
 }
 
+test('renovação mantém ciclo mais recente mesmo com confirmação antiga entregue depois', async () => {
+  await gerarCobrancaTerritorio(billingOptions);
+  await asaas.POST(asaasRequest('PAYMENT_RECEIVED','cycle-september'));
+  await asaas.POST(asaasRequest('PAYMENT_CONFIRMED','cycle-october','2026-10-08 12:00:00',{
+    payment:{id:'pay_october',subscription:'sub_test',customer:'cus_test',dueDate:'2026-10-08'},
+  }));
+  await asaas.POST(asaasRequest('PAYMENT_RECEIVED','september-late','2026-10-09 12:00:00'));
+  const b=await prisma.billingSubscription.findFirst();
+  assert.equal(b.activePaymentId,'pay_october');
+  assert.equal(b.latestPaymentDueDate,'2026-10-08');
+  assert.equal(await prisma.billingPayment.count(),2);
+  assert.equal(await prisma.outboundMessage.count({where:{kind:'BILLING'}}),1);
+});
+test('atraso pausa pedidos, preserva cidade e pagamento do ciclo correto reativa', async () => {
+  await gerarCobrancaTerritorio(billingOptions);
+  await asaas.POST(asaasRequest('PAYMENT_RECEIVED','paid-before-overdue'));
+  const october={id:'pay_october',subscription:'sub_test',customer:'cus_test',dueDate:'2026-10-08'};
+  await asaas.POST(asaasRequest('PAYMENT_OVERDUE','october-overdue','2026-10-09 12:00:00',{payment:october}));
+  const since=(await prisma.billingSubscription.findFirst()).overdueSince;
+  assert.equal((await prisma.professional.findFirst()).status,'inadimplente');
+  assert.equal(await prisma.territorySeat.count(),1);
+  await asaas.POST(asaasRequest('PAYMENT_OVERDUE','october-overdue-again','2026-10-10 12:00:00',{payment:october}));
+  assert.equal((await prisma.billingSubscription.findFirst()).overdueSince,since);
+  await asaas.POST(asaasRequest('PAYMENT_RECEIVED','september-late-overdue','2026-10-11 12:00:00'));
+  assert.equal((await prisma.professional.findFirst()).status,'inadimplente');
+  await asaas.POST(asaasRequest('PAYMENT_RECEIVED','october-paid','2026-10-12 12:00:00',{payment:october}));
+  assert.equal((await prisma.professional.findFirst()).status,'assinante');
+  assert.equal((await prisma.billingSubscription.findFirst()).overdueSince,null);
+});
+test('aviso de atraso atrasado não desfaz fatura paga e estorno é terminal por fatura', async () => {
+  await gerarCobrancaTerritorio(billingOptions);
+  await asaas.POST(asaasRequest('PAYMENT_RECEIVED','paid-for-late-overdue'));
+  await asaas.POST(asaasRequest('PAYMENT_OVERDUE','late-overdue','2026-09-09 12:00:00'));
+  assert.equal((await prisma.professional.findFirst()).status,'assinante');
+  await asaas.POST(asaasRequest('PAYMENT_REFUNDED','terminal-refund','2026-09-10 12:00:00'));
+  await asaas.POST(asaasRequest('PAYMENT_CONFIRMED','late-after-refund','2026-09-11 12:00:00'));
+  assert.equal((await prisma.billingPayment.findFirst()).state,'REFUNDED');
+  assert.equal((await prisma.professional.findFirst()).status,'interessado');
+});
+test('fatura sem vencimento válido, ciclo duplicado ou política ausente exige revisão sem commit', async () => {
+  await gerarCobrancaTerritorio(billingOptions);
+  for (const dueDate of [undefined,'2026-02-30','bad']) {
+    assert.equal((await asaas.POST(asaasRequest('PAYMENT_RECEIVED','invalid-'+dueDate,undefined,{
+      payment:{id:'pay_test',subscription:'sub_test',customer:'cus_test',dueDate},
+    }))).status,503);
+  }
+  delete process.env.ASAAS_OVERDUE_POLICY;
+  assert.equal((await asaas.POST(asaasRequest('PAYMENT_OVERDUE','policy-unset'))).status,503);
+  assert.equal(await prisma.billingPayment.count(),0);
+  await asaas.POST(asaasRequest('PAYMENT_RECEIVED','correct-payment'));
+  assert.equal((await asaas.POST(asaasRequest('PAYMENT_RECEIVED','duplicate-cycle',undefined,{
+    payment:{id:'pay_duplicate',subscription:'sub_test',customer:'cus_test',dueDate:'2026-09-08'},
+  }))).status,503);
+  assert.equal(await prisma.billingPayment.count(),1);
+});
+async function overdueCandidate(ageDays=8) {
+  await gerarCobrancaTerritorio(billingOptions);
+  await asaas.POST(asaasRequest('PAYMENT_OVERDUE','overdue-candidate'));
+  await prisma.billingSubscription.updateMany({data:{overdueSince:new Date(Date.now()-ageDays*86400000).toISOString()}});
+}
+test('cancelamento automático respeita trava e sete dias completos', async () => {
+  const {processarInadimplencia}=require('../src/lib/asaas.ts');
+  await overdueCandidate(6.99);
+  assert.equal((await processarInadimplencia()).evaluated,0);
+  process.env.ASAAS_OVERDUE_AUTOCANCEL_ENABLED='true';
+  assert.equal((await processarInadimplencia()).evaluated,0);
+  assert.equal(calls.filter(c=>c.method==='DELETE').length,0);
+});
+test('worker concorrente cancela atraso uma vez e só webhook libera cidade', async () => {
+  const {processarInadimplencia}=require('../src/lib/asaas.ts');
+  await overdueCandidate();
+  process.env.ASAAS_OVERDUE_AUTOCANCEL_ENABLED='true';
+  await Promise.all(Array.from({length:10},()=>processarInadimplencia()));
+  assert.equal(calls.filter(c=>c.method==='DELETE').length,1);
+  assert.equal((await prisma.billingSubscription.findFirst()).cancellationState,'SUBMITTED');
+  assert.equal(await prisma.territorySeat.count(),1);
+  await asaas.POST(asaasRequest('SUBSCRIPTION_DELETED','overdue-cancelled'));
+  assert.equal(await prisma.territorySeat.count(),0);
+  assert.equal((await prisma.billingSubscription.findFirst()).state,'CANCELLED');
+});
+for (const scenario of ['overdue-already-paid','overdue-wrong-owner','overdue-fetch-failure','paid-during-check','cancel-timeout']) {
+  test(`cancelamento automático ${scenario} fica para conciliação sem repetição`,async()=>{
+    const {processarInadimplencia}=require('../src/lib/asaas.ts');
+    await overdueCandidate();
+    process.env.ASAAS_OVERDUE_AUTOCANCEL_ENABLED='true'; mode=scenario;
+    await processarInadimplencia(); await processarInadimplencia();
+    assert.equal((await prisma.billingSubscription.findFirst()).cancellationState,'REVIEW');
+    assert.equal(calls.filter(c=>c.method==='DELETE').length,scenario==='cancel-timeout'?1:0);
+    assert.equal(await prisma.territorySeat.count(),1);
+  });
+}
+test('diagnóstico operacional é protegido, somente leitura e não contém dados pessoais',async()=>{
+  const ops=require('../src/app/api/internal/operations/route.ts');
+  process.env.INTERNAL_JOB_TOKEN='test-internal';
+  assert.equal((await ops.GET(new NextRequest('http://localhost/api/internal/operations'))).status,403);
+  await prisma.outboundMessage.create({data:{key:'ops-test',recipient:'11900000001',kind:'TEXT',state:'REVIEW',payload:{text:'CONTEUDO PRIVADO'}}});
+  const r=await ops.GET(new NextRequest('http://localhost/api/internal/operations',{headers:{authorization:'Bearer test-internal'}}));
+  const data=await r.json();
+  assert.equal(r.headers.get('cache-control'),'no-store');
+  assert.equal(data.attentionRequired,true);assert.equal(data.outbox[0].key,'ops-test');
+  assert.equal(JSON.stringify(data).includes('CONTEUDO PRIVADO'),false);
+  assert.equal(JSON.stringify(data).includes('11900000001'),false);
+  assert.equal(calls.length,0);
+  assert.equal((await prisma.outboundMessage.findFirst()).state,'REVIEW');
+});
+test('evento Asaas com falha fica visível e pode ser retomado uma única vez',async()=>{
+  assert.equal((await asaas.POST(asaasRequest('PAYMENT_RECEIVED','retry-after-link'))).status,503);
+  assert.equal((await prisma.webhookReceipt.findFirst()).state,'FAILED');
+  await gerarCobrancaTerritorio(billingOptions);
+  const result=await Promise.all(Array.from({length:10},()=>asaas.POST(asaasRequest('PAYMENT_RECEIVED','retry-after-link'))));
+  assert.ok(result.every(r=>r.status===200));
+  assert.equal((await prisma.webhookReceipt.findFirst()).state,'DONE');
+  assert.equal(await prisma.territoryEvent.count(),1);
+  assert.equal(await prisma.outboundMessage.count(),1);
+});
 test('HMAC valida bytes originais, rejeita segredo errado, formato inválido e alteração de espaços', () => {
   const raw = Buffer.from('{"a":1}');
   const signature = `sha256=${createHmac('sha256', 'key').update(raw).digest('hex')}`;
@@ -361,7 +484,7 @@ test('Asaas rejeita autenticação errada e assinatura sem vínculo', async () =
   const bad = asaasRequest('PAYMENT_RECEIVED', 'e1'); bad.headers.set('asaas-access-token', 'bad');
   assert.equal((await asaas.POST(bad)).status, 403);
   assert.equal((await asaas.POST(asaasRequest('PAYMENT_RECEIVED', 'e2'))).status, 503);
-  assert.equal(await prisma.webhookReceipt.count(), 0);
+  assert.equal(await prisma.webhookReceipt.count({where:{provider:'asaas',eventId:'e2',state:'FAILED'}}), 1);
 });
 test('cobranças de outros sistemas não bloqueiam fila Asaas nem alteram profissionais', async () => {
   const standalone = asaasRequest('PAYMENT_RECEIVED', 'standalone', undefined, {
@@ -410,7 +533,7 @@ test('exclusão de fatura diferente e pagamento antigo não alteram período atu
   await gerarCobrancaTerritorio(billingOptions);
   await asaas.POST(asaasRequest('PAYMENT_RECEIVED', 'paid', '2026-09-08 12:02:00'));
   await asaas.POST(asaasRequest('PAYMENT_DELETED', 'deleted-other', '2026-09-08 12:03:00', {
-    payment: { id: 'pay_other', subscription: 'sub_test', customer: 'cus_test' },
+    payment: { id: 'pay_other', subscription: 'sub_test', customer: 'cus_test', dueDate: '2026-10-08' },
   }));
   assert.equal((await prisma.professional.findUnique({ where: { id: billingOptions.professionalId } })).status, 'assinante');
   await asaas.POST(asaasRequest('PAYMENT_REFUNDED', 'refunded', '2026-09-08 12:04:00'));

@@ -4,10 +4,12 @@ import { prisma } from "../../../../lib/db";
 import { processarOutbox } from "../../../../lib/outbox";
 import { distribuirLead } from "../../../../lib/distribuicao";
 import { notificarFilaCidade } from "../../../../lib/fila";
+import { processarInadimplencia } from "../../../../lib/asaas";
 
 export async function POST(req: NextRequest) {
   if (!segredoIgual(req.headers.get("authorization"), process.env.INTERNAL_JOB_TOKEN ? `Bearer ${process.env.INTERNAL_JOB_TOKEN}` : undefined)) return NextResponse.json({ ok: false }, { status: 403 });
   try {
+    await processarInadimplencia();
     const leads = await prisma.lead.findMany({ where: { verifiedAt: { not: null }, consentAt: { not: null }, deliveryState: "WAITING_PROFESSIONAL", createdAt: { gte: new Date(Date.now() - 7 * 86400000) } }, take: 50 });
     for (const lead of leads) await distribuirLead({ leadId: lead.id });
     const cities = await prisma.territory.findMany({ where: { assinaturaAtiva: true }, take: 100 });

@@ -141,11 +141,27 @@ model BillingSubscription {
   customerId String?
   subscriptionId String? @unique
   activePaymentId String?
+  latestPaymentId String?
+  latestPaymentDueDate String?
+  overdueSince String?
+  payments BillingPayment[]
   lastEventCreated String?
   cancellationState String? // REQUESTED | PROCESSING | SUBMITTED | REVIEW | CONFIRMED
   cancellationRequestedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/// Histórico técnico por fatura: um evento atrasado não pode substituir outro ciclo.
+model BillingPayment {
+  paymentId String @id
+  professionalId String
+  billing BillingSubscription @relation(fields: [professionalId], references: [professionalId], onDelete: Restrict)
+  dueDate String
+  state String // PAID | OVERDUE | REFUNDED | DELETED
+  lastEventCreated String
+  updatedAt DateTime @updatedAt
+  @@index([professionalId, dueDate])
 }
 
 /// Sem conteúdo de mensagem, CPF ou token. PROCESSING abandonado requer reconciliação.
