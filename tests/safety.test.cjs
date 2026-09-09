@@ -21,7 +21,7 @@ const { NextRequest } = require('next/server');
 const { prisma } = require('../src/lib/db.ts');
 const meta = require('../src/app/api/whatsapp/webhook/route.ts');
 const asaas = require('../src/app/api/asaas/webhook/route.ts');
-const { gerarCobrancaTerritorio } = require('../src/lib/asaas.ts');
+const { gerarCobrancaTerritorio, cancelarAssinatura } = require('../src/lib/asaas.ts');
 const { processarUmaVez } = require('../src/lib/webhook-receipt.ts');
 const { assinaturaMetaValida } = require('../src/lib/webhook-security.ts');
 
@@ -72,6 +72,14 @@ beforeEach(async () => {
     if (u.pathname === '/v3/subscriptions/sub_test/payments') {
       if (mode === 'invoice-failure') throw new Error('consulta de fatura indisponível');
       return json({ data: [{ invoiceUrl: 'https://sandbox.asaas.com/i/test' }] });
+    }
+    if (u.pathname === '/v3/subscriptions/sub_test' && init.method === 'GET') {
+      return json({ id: 'sub_test', customer: mode === 'cancel-mismatch' ? 'other' : 'cus_test', externalReference: billingOptions.professionalId });
+    }
+    if (u.pathname === '/v3/subscriptions/sub_test' && init.method === 'DELETE') {
+      if (mode === 'cancel-timeout') throw new Error('timeout apos DELETE');
+      if (mode === 'cancel-early-webhook') await asaas.POST(asaasRequest('SUBSCRIPTION_DELETED', 'early-delete'));
+      return json({ deleted: true, id: 'sub_test' });
     }
     throw new Error(`Rede não permitida no teste: ${u.pathname}`);
   };
@@ -388,7 +396,8 @@ test('evento Asaas duplicado aplica alteração uma vez, cancelamento usa objeto
   const results = await Promise.all(Array.from({ length: 10 }, () => asaas.POST(asaasRequest('PAYMENT_RECEIVED', 'paid'))));
   assert.ok(results.every(r => r.status === 200));
   assert.equal(await prisma.territoryEvent.count(), 1);
-  assert.equal(calls.filter(c => c.path.endsWith('/messages')).length, 1);
+  assert.equal(calls.filter(c => c.path.endsWith('/messages')).length, 0);
+  assert.equal(await prisma.outboundMessage.count({where:{kind:'BILLING'}}), 1);
   assert.equal((await prisma.professional.findUnique({ where: { id: billingOptions.professionalId } })).status, 'assinante');
   assert.equal((await asaas.POST(asaasRequest('SUBSCRIPTION_DELETED', 'cancelled', '2026-09-08 12:01:00', { payment: undefined }))).status, 200);
   assert.equal((await prisma.professional.findUnique({ where: { id: billingOptions.professionalId } })).status, 'cancelado');
@@ -405,4 +414,137 @@ test('exclusão de fatura diferente e pagamento antigo não alteram período atu
   await asaas.POST(asaasRequest('PAYMENT_REFUNDED', 'refunded', '2026-09-08 12:04:00'));
   await asaas.POST(asaasRequest('PAYMENT_RECEIVED', 'old', '2026-09-08 12:01:00'));
   assert.equal((await prisma.professional.findUnique({ where: { id: billingOptions.professionalId } })).status, 'interessado');
+});
+
+test('pagamento é commitado com aviso durável; falha Meta fica em revisão sem envio duplicado', async () => {
+  const { processarOutbox } = require('../src/lib/outbox.ts');
+  await gerarCobrancaTerritorio(billingOptions);
+  mode = 'message-failure';
+  assert.equal((await asaas.POST(asaasRequest('PAYMENT_RECEIVED', 'durable-paid'))).status, 200);
+  const job = await prisma.outboundMessage.findFirst();
+  assert.equal(job.state, 'PENDING');
+  assert.equal(calls.filter(c => c.path.endsWith('/messages')).length, 0);
+  await processarOutbox();
+  assert.equal((await prisma.outboundMessage.findUnique({where:{key:job.key}})).state, 'REVIEW');
+  mode = '';
+  await asaas.POST(asaasRequest('PAYMENT_RECEIVED', 'durable-paid'));
+  await processarOutbox();
+  assert.equal(calls.filter(c => c.path.endsWith('/messages')).length, 1);
+  assert.equal(await prisma.outboundMessage.count(), 1);
+});
+test('avisos financeiros recebem callback de entrega pela outbox', async () => {
+  const { processarOutbox, registrarEntregas } = require('../src/lib/outbox.ts');
+  await gerarCobrancaTerritorio(billingOptions);
+  await asaas.POST(asaasRequest('PAYMENT_RECEIVED', 'delivery-paid'));
+  await processarOutbox();
+  const job = await prisma.outboundMessage.findFirst();
+  assert.equal(job.state, 'SENT');
+  await registrarEntregas(delivery(job.messageId));
+  assert.equal((await prisma.outboundMessage.findUnique({where:{key:job.key}})).state, 'DELIVERED');
+});
+test('cancelamento fora de ordem é terminal e bloqueia aviso de ativação ainda pendente', async () => {
+  const { processarOutbox } = require('../src/lib/outbox.ts');
+  await gerarCobrancaTerritorio(billingOptions);
+  await asaas.POST(asaasRequest('PAYMENT_RECEIVED', 'paid-newer', '2026-09-08 12:03:00'));
+  await asaas.POST(asaasRequest('SUBSCRIPTION_DELETED', 'cancel-older', '2026-09-08 12:01:00'));
+  await processarOutbox();
+  const sent = calls.filter(c => c.path.endsWith('/messages'));
+  assert.equal(sent.length, 1);
+  assert.match(sent[0].body.text.body, /Cancelamento confirmado/);
+  assert.equal(await prisma.territorySeat.count(), 0);
+  assert.equal((await prisma.billingSubscription.findFirst()).cancellationState, 'CONFIRMED');
+  assert.equal(await prisma.outboundMessage.count({where:{state:'REVIEW'}}), 1);
+});
+test('cancelamento exige pedido prévio e confirmação do mesmo titular pelo webhook autenticado', async () => {
+  await gerarCobrancaTerritorio(billingOptions);
+  await prisma.professional.update({where:{id:billingOptions.professionalId},data:{status:'assinante'}});
+  await meta.POST(request(payload('cancel-no-request', 'CONFIRMAR CANCELAMENTO')));
+  assert.equal(calls.filter(c => c.method === 'DELETE').length, 0);
+  await meta.POST(request(payload('cancel-request', 'CANCELAR ASSINATURA')));
+  assert.equal((await prisma.billingSubscription.findFirst()).cancellationState, 'REQUESTED');
+  await meta.POST(request(payload('cancel-foreign', 'CONFIRMAR CANCELAMENTO', 'test-phone', '5511900000002')));
+  assert.equal(calls.filter(c => c.method === 'DELETE').length, 0);
+  await meta.POST(request(payload('cancel-confirm', 'CONFIRMAR CANCELAMENTO')));
+  assert.equal(calls.filter(c => c.method === 'DELETE').length, 1);
+  assert.equal((await prisma.billingSubscription.findFirst()).cancellationState, 'SUBMITTED');
+  assert.equal(await prisma.territorySeat.count(), 1); // só liberar no evento confirmado
+  await asaas.POST(asaasRequest('SUBSCRIPTION_DELETED', 'cancel-confirmed'));
+  assert.equal((await prisma.professional.findFirst()).status, 'cancelado');
+  assert.equal(await prisma.territorySeat.count(), 0);
+  await meta.POST(request(payload('cancel-again', 'CONFIRMAR CANCELAMENTO')));
+  assert.equal(calls.filter(c => c.method === 'DELETE').length, 1);
+});
+test('pedido de cancelamento vencido não chama DELETE', async () => {
+  await gerarCobrancaTerritorio(billingOptions);
+  await cancelarAssinatura(billingOptions.professionalId, false);
+  await prisma.billingSubscription.update({where:{professionalId:billingOptions.professionalId},data:{cancellationRequestedAt:new Date(Date.now()-31*60_000)}});
+  assert.match(await cancelarAssinatura(billingOptions.professionalId, true), /Nada foi cancelado/);
+  assert.equal(calls.filter(c => c.method === 'DELETE').length, 0);
+  assert.equal((await gerarCobrancaTerritorio(billingOptions)).ok, true);
+  assert.equal(subscriptionPosts().length, 1);
+});
+test('dez confirmações concorrentes emitem somente um DELETE', async () => {
+  await gerarCobrancaTerritorio(billingOptions);
+  await cancelarAssinatura(billingOptions.professionalId, false);
+  await Promise.all(Array.from({length:10},()=>cancelarAssinatura(billingOptions.professionalId,true)));
+  assert.equal(calls.filter(c => c.method === 'DELETE').length, 1);
+  assert.equal((await prisma.billingSubscription.findFirst()).cancellationState, 'SUBMITTED');
+});
+test('timeout de cancelamento exige revisão, não reemite DELETE nem libera cidade', async () => {
+  await gerarCobrancaTerritorio(billingOptions);
+  await cancelarAssinatura(billingOptions.professionalId, false);
+  mode = 'cancel-timeout';
+  await cancelarAssinatura(billingOptions.professionalId,true);
+  mode = '';
+  await cancelarAssinatura(billingOptions.professionalId,false);
+  await cancelarAssinatura(billingOptions.professionalId,true);
+  assert.equal(calls.filter(c => c.method === 'DELETE').length, 1);
+  assert.equal((await prisma.billingSubscription.findFirst()).cancellationState, 'REVIEW');
+  assert.equal(await prisma.territorySeat.count(), 1);
+});
+test('cancelamento confere vínculo remoto antes de apagar assinatura', async () => {
+  await gerarCobrancaTerritorio(billingOptions);
+  await cancelarAssinatura(billingOptions.professionalId, false);
+  mode = 'cancel-mismatch';
+  await cancelarAssinatura(billingOptions.professionalId,true);
+  assert.equal(calls.filter(c => c.method === 'DELETE').length, 0);
+  assert.equal((await prisma.billingSubscription.findFirst()).cancellationState, 'REVIEW');
+});
+test('callback durante DELETE não regride cancelamento confirmado para submetido', async () => {
+  await gerarCobrancaTerritorio(billingOptions);
+  await cancelarAssinatura(billingOptions.professionalId, false);
+  mode = 'cancel-early-webhook';
+  await cancelarAssinatura(billingOptions.professionalId,true);
+  const billing = await prisma.billingSubscription.findFirst();
+  assert.equal(billing.state, 'CANCELLED');
+  assert.equal(billing.cancellationState, 'CONFIRMED');
+});
+test('desativar novas cobranças não impede cancelamento de contrato já existente', async () => {
+  await gerarCobrancaTerritorio(billingOptions);
+  process.env.ASAAS_BILLING_ENABLED = 'false';
+  await cancelarAssinatura(billingOptions.professionalId,false);
+  await cancelarAssinatura(billingOptions.professionalId,true);
+  assert.equal(calls.filter(c => c.method === 'DELETE').length, 1);
+});
+test('titular não verificado e ambiente divergente não iniciam cancelamento', async () => {
+  await gerarCobrancaTerritorio(billingOptions);
+  await prisma.professional.update({where:{id:billingOptions.professionalId},data:{verifiedAt:null}});
+  await cancelarAssinatura(billingOptions.professionalId,false);
+  assert.equal((await prisma.billingSubscription.findFirst()).cancellationState, null);
+  await prisma.professional.update({where:{id:billingOptions.professionalId},data:{verifiedAt:new Date()}});
+  process.env.ASAAS_ENV='production';
+  await cancelarAssinatura(billingOptions.professionalId,false);
+  assert.equal((await prisma.billingSubscription.findFirst()).cancellationState, null);
+  assert.equal(calls.filter(c=>c.method==='DELETE').length,0);
+});
+test('não quero e cancelar genérico não encerram contrato; cancelamento pendente não reenvia fatura', async () => {
+  await gerarCobrancaTerritorio(billingOptions);
+  await prisma.professional.update({where:{id:billingOptions.professionalId},data:{status:'assinante'}});
+  await meta.POST(request(payload('not-cancel', 'não quero')));
+  await meta.POST(request(payload('generic-cancel', 'cancelar')));
+  assert.equal((await prisma.billingSubscription.findFirst()).cancellationState,null);
+  assert.equal(calls.filter(c=>c.method==='DELETE').length,0);
+  await cancelarAssinatura(billingOptions.professionalId,false);
+  assert.equal((await gerarCobrancaTerritorio(billingOptions)).ok,false);
+  assert.equal(subscriptionPosts().length,1);
 });

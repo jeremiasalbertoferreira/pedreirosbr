@@ -105,7 +105,7 @@ model TerritorySeat {
 model OutboundMessage {
   key String @id
   recipient String
-  kind String // TEXT | LEAD | INVITE
+  kind String // TEXT | LEAD | INVITE | BILLING
   payload Json
   state String @default("PENDING") // PENDING | SENDING | SENT | DELIVERED | REVIEW
   messageId String? @unique
@@ -142,6 +142,8 @@ model BillingSubscription {
   subscriptionId String? @unique
   activePaymentId String?
   lastEventCreated String?
+  cancellationState String? // REQUESTED | PROCESSING | SUBMITTED | REVIEW | CONFIRMED
+  cancellationRequestedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }

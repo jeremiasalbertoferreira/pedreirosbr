@@ -18,7 +18,7 @@ async function asaasFetch<T>(path: string, init: RequestInit): Promise<T> {
   if (!asaasConfigurado()) throw new Error("asaas_nao_configurado");
   const base = process.env.ASAAS_ENV === "sandbox" ? "https://api-sandbox.asaas.com/v3" : "https://api.asaas.com/v3";
   const resp = await fetch(`${base}${path}`, {
-    ...init, cache: "no-store", signal: AbortSignal.timeout(10_000),
+    ...init, cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000),
     headers: { access_token: process.env.ASAAS_API_KEY!, "Content-Type": "application/json" },
   });
   // Não registrar respostas do provedor: podem conter CPF ou dados financeiros.
@@ -76,7 +76,9 @@ export async function gerarCobrancaTerritorio(opts: {
     if (existing.environment !== environment || existing.territorySlug !== professional.territorySlug) {
       return { ok: false, motivo: "assinatura_requer_revisao" };
     }
-    if (existing.state === "READY" && existing.subscriptionId) return linkDaAssinatura(existing.subscriptionId);
+    const pedidoVencido = existing.cancellationState === "REQUESTED" && existing.cancellationRequestedAt &&
+      Date.now() - existing.cancellationRequestedAt.getTime() > 30 * 60_000;
+    if (existing.state === "READY" && (!existing.cancellationState || pedidoVencido) && existing.subscriptionId) return linkDaAssinatura(existing.subscriptionId);
     return { ok: false, motivo: "assinatura_requer_revisao" };
   }
 
@@ -118,5 +120,54 @@ export async function gerarCobrancaTerritorio(opts: {
     await prisma.billingSubscription.update({ where, data: { state: "REVIEW" } });
     console.warn("[asaas] tentativa requer reconciliacao; nova emissao bloqueada");
     return { ok: false, motivo: "assinatura_requer_revisao" };
+  }
+}
+
+/** Chamada somente pelo remetente autenticado no webhook Meta; nunca por ID público. */
+export async function cancelarAssinatura(professionalId: string, confirmar: boolean): Promise<string> {
+  const pending = "Seu cancelamento está em conferência. Não é necessário repetir. Avisaremos quando estiver confirmado; esta mensagem ainda não confirma o encerramento.";
+  if (!asaasConfigurado()) return "Não foi possível conferir sua assinatura. Solicite o cancelamento em contato@jeafex.com.br.";
+  const claimed = await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT "professionalId" FROM "BillingSubscription" WHERE "professionalId" = ${professionalId} FOR UPDATE`;
+    const billing = await tx.billingSubscription.findUnique({ where: { professionalId }, include: { professional: true } });
+    if (!billing?.professional.verifiedAt || billing.environment !== process.env.ASAAS_ENV ||
+        billing.territorySlug !== billing.professional.territorySlug) return { message: "Não foi possível conferir sua assinatura. Solicite atendimento em contato@jeafex.com.br." };
+    if (billing.state === "CANCELLED") return { message: "Sua assinatura já está cancelada. Nenhum novo cancelamento ou estorno foi realizado." };
+    if (billing.state !== "READY" || !billing.subscriptionId || !billing.customerId ||
+        (billing.cancellationState && billing.cancellationState !== "REQUESTED")) return { message: pending };
+    if (!confirmar) {
+      await tx.billingSubscription.update({ where: { professionalId }, data: {
+        cancellationState: "REQUESTED", cancellationRequestedAt: new Date(),
+      } });
+      return { message: "Para cancelar sua assinatura e encerrar o acesso exclusivo à cidade, envie CONFIRMAR CANCELAMENTO neste mesmo WhatsApp em até 30 minutos. O cancelamento encerra a recorrência; não realiza estorno automático de pagamentos já feitos. Se não deseja cancelar, não envie a confirmação." };
+    }
+    if (billing.cancellationState !== "REQUESTED" || !billing.cancellationRequestedAt ||
+        Date.now() - billing.cancellationRequestedAt.getTime() > 30 * 60_000) {
+      return { message: "Não há solicitação de cancelamento válida. Envie CANCELAR ASSINATURA para iniciar. Nada foi cancelado nesta tentativa." };
+    }
+    // Persistir ANTES de DELETE. Falha ambígua/restart nunca deve repetir a operação.
+    await tx.billingSubscription.update({ where: { professionalId }, data: { cancellationState: "PROCESSING" } });
+    return { billing };
+  });
+  if (claimed.message) return claimed.message;
+  const billing = claimed.billing!;
+  try {
+    const remote = await asaasFetch<{ id?: string; customer?: string; externalReference?: string }>(
+      `/subscriptions/${encodeURIComponent(billing.subscriptionId!)}`, { method: "GET" },
+    );
+    if (remote.id !== billing.subscriptionId || remote.customer !== billing.customerId || remote.externalReference !== professionalId) {
+      throw new Error("cancelamento_vinculo_divergente");
+    }
+    const result = await asaasFetch<{ deleted?: boolean; id?: string }>(
+      `/subscriptions/${encodeURIComponent(billing.subscriptionId!)}`, { method: "DELETE" },
+    );
+    if (result.deleted !== true || (result.id && result.id !== billing.subscriptionId)) throw new Error("cancelamento_ambiguo");
+    // O webhook pode confirmar antes do retorno do DELETE. Não regredir CONFIRMED.
+    await prisma.billingSubscription.updateMany({ where: { professionalId, cancellationState: "PROCESSING", state: "READY" }, data: { cancellationState: "SUBMITTED" } });
+    return pending;
+  } catch {
+    await prisma.billingSubscription.updateMany({ where: { professionalId, cancellationState: "PROCESSING", state: "READY" }, data: { cancellationState: "REVIEW" } });
+    console.warn("[asaas] cancelamento requer reconciliacao; repeticao bloqueada");
+    return pending;
   }
 }

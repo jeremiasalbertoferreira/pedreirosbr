@@ -17,6 +17,17 @@ export async function processarOutbox() {
     const claimed = await prisma.outboundMessage.updateMany({ where: { key: job.key, state: "PENDING" }, data: { state: "SENDING", attempts: { increment: 1 } } });
     if (!claimed.count) continue;
     const payload = job.payload as Record<string, string>;
+    if (job.kind === "BILLING") {
+      const billing = await prisma.billingSubscription.findUnique({ where: { professionalId: payload.professionalId }, include: { professional: true } });
+      const valid = billing?.subscriptionId === payload.subscriptionId && billing.professional.whatsapp === job.recipient &&
+        (payload.action === "CANCELLED" ? billing.state === "CANCELLED" :
+          payload.action === "PAID" && billing.state === "READY" && billing.activePaymentId === payload.paymentId &&
+          billing.professional.status === "assinante" && !["PROCESSING", "SUBMITTED", "REVIEW"].includes(billing.cancellationState ?? ""));
+      if (!valid) {
+        await prisma.outboundMessage.update({ where: { key: job.key }, data: { state: "REVIEW" } });
+        continue;
+      }
+    }
     if (job.kind === "LEAD") {
       const lead = await prisma.lead.findUnique({ where: { id: payload.leadId } });
       const pro = await prisma.professional.findUnique({ where: { id: payload.professionalId } });
@@ -26,7 +37,7 @@ export async function processarOutbox() {
         continue;
       }
     }
-    const result = job.kind === "TEXT" ? await enviarMensagemTexto(job.recipient, payload.text)
+    const result = ["TEXT", "BILLING"].includes(job.kind) ? await enviarMensagemTexto(job.recipient, payload.text)
       : job.kind === "LEAD" ? await enviarNovoLead(job.recipient, payload.city, payload.summary, payload.phone)
       : await enviarConviteTerritorio(job.recipient, payload.name, payload.city, 1);
     await prisma.outboundMessage.update({ where: { key: job.key }, data: {

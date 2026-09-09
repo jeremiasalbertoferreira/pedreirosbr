@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../lib/db";
 import { enviarMensagemTexto as enviarTexto } from "../../../../lib/whatsapp";
-import { gerarCobrancaTerritorio, valorAssinatura, cobrancaAutomaticaHabilitada } from "../../../../lib/asaas";
+import { gerarCobrancaTerritorio, valorAssinatura, cobrancaAutomaticaHabilitada, cancelarAssinatura } from "../../../../lib/asaas";
 import { getCidade } from "../../../../lib/data/cidades";
 import { assinaturaMetaValida, lerCorpoLimitado, segredoIgual } from "../../../../lib/webhook-security";
 import { processarUmaVez } from "../../../../lib/webhook-receipt";
@@ -77,9 +77,10 @@ export async function POST(req: NextRequest) {
 }
 
 async function processarResposta(de: string, texto: string) {
-  if (await confirmarWhatsApp(de, texto)) return;
-  const zap = de.slice(2); // payload validado; somente remetente brasileiro completo
   const normalizado = texto.trim().toLowerCase();
+  const comandoCancelamento = ["cancelar assinatura", "confirmar cancelamento"].includes(normalizado);
+  if (!comandoCancelamento && await confirmarWhatsApp(de, texto)) return;
+  const zap = de.slice(2); // payload validado; somente remetente brasileiro completo
 
   // Contatados (convite) e interessados (aguardando CPF/pagamento) nos interessam
   const profissionais = await prisma.professional.findMany({
@@ -87,7 +88,13 @@ async function processarResposta(de: string, texto: string) {
   });
   if (profissionais.length > 1) throw new Error("remetente_ambiguo");
   const profissional = profissionais[0];
-  if (!profissional || !["contatado", "interessado"].includes(profissional.status)) return;
+  if (!profissional) return;
+  // Comandos exatos e titular autenticado; NÃO/SAIR não cancelam uma assinatura.
+  if (comandoCancelamento) {
+    await enviarMensagemTexto(de, await cancelarAssinatura(profissional.id, normalizado === "confirmar cancelamento"));
+    return;
+  }
+  if (!["contatado", "interessado"].includes(profissional.status)) return;
 
   const cidade = getCidade(profissional.territorySlug);
   const cidadeLabel = cidade ? `${cidade.nome}/${cidade.uf}` : profissional.territorySlug;

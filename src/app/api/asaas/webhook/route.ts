@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../lib/db";
 import { lerCorpoLimitado, segredoIgual } from "../../../../lib/webhook-security";
-import { enviarMensagemTexto } from "../../../../lib/whatsapp";
 import { getCidade } from "../../../../lib/data/cidades";
 
 export const runtime = "nodejs";
@@ -38,7 +37,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false }, { status: 400 });
   }
   try {
-    const notification = await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       const claimed = await tx.webhookReceipt.createMany({
         data: [{ provider: "asaas", eventId: body.id, state: "DONE" }], skipDuplicates: true,
       });
@@ -57,7 +56,8 @@ export async function POST(req: NextRequest) {
       }
       if (billing.state === "CANCELLED") return; // evento de pagamento não ressuscita cancelamento
       if (billing.state !== "READY") throw new Error("assinatura_pendente");
-      if (billing.lastEventCreated && body.dateCreated < billing.lastEventCreated) return;
+      // Encerramento da recorrência é terminal, mesmo se entregue fora de ordem.
+      if (!cancelled && billing.lastEventCreated && body.dateCreated < billing.lastEventCreated) return;
 
       const paid = body.event === "PAYMENT_RECEIVED" || body.event === "PAYMENT_CONFIRMED";
       // Excluir fatura futura não cancela um período já pago.
@@ -68,6 +68,7 @@ export async function POST(req: NextRequest) {
       if (professional.territorySlug !== billing.territorySlug) throw new Error("territorio_divergente");
       await tx.billingSubscription.update({ where: { professionalId: billing.professionalId }, data: {
         state: cancelled ? "CANCELLED" : "READY",
+        ...(cancelled ? { cancellationState: "CONFIRMED" } : {}),
         activePaymentId: paid ? object.id : null,
         lastEventCreated: body.dateCreated,
       } });
@@ -79,18 +80,20 @@ export async function POST(req: NextRequest) {
         territorySlug: billing.territorySlug, tipo: "profissional",
         meta: { acao: cancelled ? "assinatura_cancelada" : paid ? "virou_assinante" : "pagamento_estornado", eventId: body.id, subscriptionId },
       } });
-      if (paid && professional.status !== "assinante") {
-        return { whatsapp: professional.whatsapp, territorySlug: billing.territorySlug };
+      if (cancelled || (paid && professional.status !== "assinante")) {
+        const city = getCidade(billing.territorySlug);
+        const label = city ? `${city.nome}/${city.uf}` : billing.territorySlug;
+        await tx.outboundMessage.createMany({ data: [{
+          key: cancelled ? `billing:cancelled:${subscriptionId}` : `billing:paid:${subscriptionId}:${object.id}`,
+          recipient: professional.whatsapp, kind: "BILLING",
+          payload: { professionalId: professional.id, subscriptionId, paymentId: object.id,
+            action: cancelled ? "CANCELLED" : "PAID",
+            text: cancelled ? `Cancelamento confirmado. Sua assinatura para ${label} foi encerrada no PedreirosBR. A vaga exclusiva foi liberada. Este cancelamento não realiza estorno automático de pagamentos já feitos.`
+              : `Pagamento confirmado! Sua assinatura para ${label} foi ativada no PedreirosBR. Para solicitar cancelamento, envie CANCELAR ASSINATURA.`,
+          },
+        }], skipDuplicates: true });
       }
     });
-    // Preserva aviso de boas-vindas, fora da transação. Outbox é necessária para garantir entrega.
-    if (notification) {
-      const city = getCidade(notification.territorySlug);
-      const label = city ? `${city.nome}/${city.uf}` : notification.territorySlug;
-      const sent = await enviarMensagemTexto(notification.whatsapp,
-        `Pagamento confirmado! Sua assinatura para ${label} foi ativada no PedreirosBR.`);
-      if (!sent.ok) console.warn("[webhook/asaas] boas-vindas pendente; conferir entrega manualmente");
-    }
   } catch {
     // Não confirmar processamento que não foi commitado. Permitir retry/reconciliação.
     console.error("[webhook/asaas] processamento pendente; revisar vinculo ou banco");
