@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-export const metadata: Metadata = { title: "Exclusão de dados" };
+export const metadata: Metadata = { title: "Exclusão de dados", description: "Como solicitar exclusão de dados, sair da fila ou pedir atendimento de privacidade ao PedreirosBR e à JEAFEX Tecnologia Ltda.", alternates: { canonical: "/exclusao-de-dados" } };
 export default function Exclusao() {
   return <article className="mx-auto max-w-3xl space-y-6 py-12 text-ink-soft">
     <h1 className="font-display text-3xl font-bold text-ink">Solicitar exclusão de dados</h1>

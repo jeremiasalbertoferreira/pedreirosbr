@@ -82,30 +82,38 @@ export function CadastroProfissional({ ufs, cidades }: Props) {
   return (
     <div className="rounded-2xl bg-ink p-6 text-paper sm:p-8">
       <p className="font-display text-xl font-bold">Entre na fila da sua cidade — grátis</p>
-      <p className="mt-1 text-sm text-paper/70">
-        Sem mensalidade agora. Quando a procura esquentar na sua cidade, os primeiros da fila recebem
-        a chance de assumir o território com exclusividade.
+      <p className="mt-2 text-sm text-paper/80">
+        Cadastre seus dados e confirme seu número no WhatsApp. A oferta de R$ 97/mês depende
+        da demanda confirmada e da disponibilidade da vaga. Entrar na fila não inicia cobrança.
       </p>
+      <p className="mt-3 text-sm text-paper/80">1. Cadastro gratuito · 2. Confirmação do número · 3. Oferta da vaga, quando disponível</p>
       <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <label className="block text-sm font-semibold">Seu nome
         <input
           type="text"
+          autoComplete="name"
           aria-label="Seu nome"
           placeholder="Seu nome"
-          className="rounded-xl border border-paper/20 bg-paper/10 px-4 py-3 text-paper placeholder:text-paper/40 outline-none focus:border-accent"
+          className="mt-2 w-full rounded-xl border border-paper/40 bg-paper/10 px-4 py-3 text-paper placeholder:text-paper/70"
           value={nome}
           onChange={(e) => setNome(e.target.value)}
         />
+        </label>
+        <label className="block text-sm font-semibold">Seu WhatsApp com DDD
         <input
           type="tel"
+          autoComplete="tel"
           aria-label="Seu WhatsApp com DDD"
           placeholder="Seu WhatsApp com DDD"
-          className="rounded-xl border border-paper/20 bg-paper/10 px-4 py-3 text-paper placeholder:text-paper/40 outline-none focus:border-accent"
+          className="mt-2 w-full rounded-xl border border-paper/40 bg-paper/10 px-4 py-3 text-paper placeholder:text-paper/70"
           value={zap}
           onChange={(e) => setZap(e.target.value)}
         />
+        </label>
+        <label className="block text-sm font-semibold">Estado onde trabalha
         <select
           aria-label="Estado onde trabalha"
-          className="rounded-xl border border-paper/20 bg-paper/10 px-4 py-3 text-paper outline-none focus:border-accent"
+          className="mt-2 w-full rounded-xl border border-paper/40 bg-paper/10 px-4 py-3 text-paper"
           value={uf}
           onChange={(e) => { setUf(e.target.value); setCidadeSlug(""); }}
         >
@@ -113,9 +121,11 @@ export function CadastroProfissional({ ufs, cidades }: Props) {
             <option key={u.uf} value={u.uf} className="text-ink">{u.nome}</option>
           ))}
         </select>
+        </label>
+        <label className="block text-sm font-semibold">Cidade onde trabalha
         <select
           aria-label="Cidade onde trabalha"
-          className="rounded-xl border border-paper/20 bg-paper/10 px-4 py-3 text-paper outline-none focus:border-accent"
+          className="mt-2 w-full rounded-xl border border-paper/40 bg-paper/10 px-4 py-3 text-paper"
           value={cidadeSlug}
           onChange={(e) => setCidadeSlug(e.target.value)}
         >
@@ -124,21 +134,24 @@ export function CadastroProfissional({ ufs, cidades }: Props) {
             <option key={c.slug} value={c.slug} className="text-ink">{c.nome}</option>
           ))}
         </select>
+        </label>
       </div>
-      <label className="mt-4 flex items-start gap-3 text-sm text-paper/90">
-        <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} className="mt-1" />
+      <label className="mt-4 flex cursor-pointer items-start gap-3 py-2 text-sm text-paper/90">
+        <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0" />
         <span>Li os <a className="underline" href="/termos">termos</a> e a <a className="underline" href="/politica-de-privacidade">política de privacidade</a>. Quero receber pelo WhatsApp confirmações e a oferta da vaga na minha cidade. Entrar na fila é grátis; assinatura de R$ 97/mês apenas após minha confirmação.</span>
       </label>
       <button
+        aria-describedby="cadastro-proximo-passo"
         onClick={enviar}
         disabled={enviando || !consent}
         className="mt-4 w-full rounded-xl bg-accent px-6 py-3.5 font-display text-lg font-bold text-white shadow-[0_4px_0_0_#9A3412] transition hover:translate-y-0.5 hover:shadow-none disabled:opacity-60"
       >
         {enviando ? "Entrando na fila…" : "Entrar na fila da minha cidade"}
       </button>
-      {erro && <p className="mt-3 text-sm text-red-400">{erro}</p>}
-      <p className="mt-3 text-xs text-paper/40">
-        Sua cidade não aparece? Trabalhe numa cidade vizinha por enquanto — novas cidades abrem conforme a procura cresce.
+      <p id="cadastro-proximo-passo" role="status" className="mt-3 text-sm text-paper/80">{!consent ? "Para continuar, leia e aceite os termos e a autorização acima." : "Após enviar, você precisará confirmar este mesmo número no WhatsApp."}</p>
+      {erro && <p role="alert" className="mt-3 text-sm text-red-300">{erro}</p>}
+      <p className="mt-3 text-sm text-paper/80">
+        Sua cidade não aparece? <a href="/contato" className="underline">Fale com o atendimento</a>. Selecione somente uma cidade onde você realmente atende.
       </p>
     </div>
   );

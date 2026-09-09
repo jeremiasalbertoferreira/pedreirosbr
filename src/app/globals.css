@@ -17,6 +17,15 @@ html {
   scroll-behavior: smooth;
 }
 
+:where(a, button, input, select, summary):focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
 body {
   background: var(--color-paper);
   color: var(--color-ink);

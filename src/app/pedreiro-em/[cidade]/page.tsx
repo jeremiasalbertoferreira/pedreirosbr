@@ -20,8 +20,8 @@ export async function generateMetadata({ params }: { params: Promise<{ cidade: s
   const c = getCidade(cidade);
   if (!c) return {};
   return {
-    title: `Quanto custa um ${oficio.nome.toLowerCase()} em ${c.nome} (${c.uf})? Preços 2026`,
-    description: `Preços de ${oficio.nome.toLowerCase()} em ${c.nome}: diária, reboco por m², muro por m² e pintura. Calculadoras grátis com materiais detalhados e orçamento no WhatsApp.`,
+    title: `Pedreiro em ${c.nome} (${c.uf}): estimativas estaduais de custo`,
+    description: `Planeje sua obra em ${c.nome}: estimativas de diária, reboco, muro e pintura com fatores de ${c.uf}. Veja premissas e limites; não é cotação municipal.`,
     alternates: { canonical: `${SITE_URL}/pedreiro-em/${c.slug}` },
   };
 }
@@ -48,37 +48,16 @@ export default async function CidadePage({ params }: { params: Promise<{ cidade:
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 py-8 sm:py-10">
       <JsonLd
         data={[
           {
             "@context": "https://schema.org",
-            "@type": "Service",
-            serviceType: `Serviços de ${oficio.nome.toLowerCase()}`,
-            areaServed: { "@type": "City", name: c.nome, containedInPlace: { "@type": "State", name: uf.nome } },
-            provider: { "@type": "Organization", name: `${oficio.nomePlural}BR`, url: SITE_URL },
-          },
-          {
-            "@context": "https://schema.org",
-            "@type": "FAQPage",
-            mainEntity: [
-              {
-                "@type": "Question",
-                name: `Quanto custa a diária de um pedreiro em ${c.nome} em 2026?`,
-                acceptedAnswer: {
-                  "@type": "Answer",
-                  text: `Em ${c.nome} (${c.uf}), a diária de pedreiro fica entre R$ ${diariaMin} e R$ ${diariaMax}, conforme experiência e tipo de serviço. Ajudante custa em média 50–60% desse valor.`,
-                },
-              },
-              {
-                "@type": "Question",
-                name: `Quanto custa o m² de reboco em ${c.nome}?`,
-                acceptedAnswer: {
-                  "@type": "Answer",
-                  text: `A mão de obra de reboco em ${c.nome} fica em torno de ${brlFmt(reboco.maoDeObraM2)}/m². Com materiais (cimento, areia e cal), um reboco de 40 m² fica entre ${brlFmt(reboco.totalMin)} e ${brlFmt(reboco.totalMax)}.`,
-                },
-              },
-            ],
+            "@type": "WebPage",
+            name: `Pedreiro em ${c.nome}: estimativas estaduais de custo`,
+            url: `${SITE_URL}/pedreiro-em/${c.slug}`,
+            description: `Estimativas preliminares com fatores de ${uf.nome}, não cotações de ${c.nome}.`,
+            publisher: { "@id": `${SITE_URL}/#organizacao` },
           },
         ]}
       />
@@ -89,10 +68,15 @@ export default async function CidadePage({ params }: { params: Promise<{ cidade:
           Quanto custa um {oficio.nome.toLowerCase()} em {c.nome} ({c.uf})?
         </h1>
         <p className="mt-3 text-lg text-neutral-700">
-          Em <strong>{c.nome}</strong>, a diária de {oficio.nome.toLowerCase()} fica entre{" "}
-          <strong>R$ {diariaMin} e R$ {diariaMax}</strong> em 2026. Por serviço: reboco ≈{" "}
+          Para planejar uma obra em <strong>{c.nome}</strong>, a simulação usa a referência estadual
+          de <strong>{uf.nome}</strong>: diária estimada entre <strong>R$ {diariaMin} e R$ {diariaMax}</strong>.
+          Por serviço: reboco ≈{" "}
           <strong>{brlFmt(reboco.maoDeObraM2)}/m²</strong>, muro ≈ <strong>{brlFmt(muro.maoDeObraM2)}/m²</strong> e
           pintura ≈ <strong>{brlFmt(pintura.maoDeObraM2)}/m²</strong> de mão de obra.
+        </p>
+        <p className="mt-3 rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm leading-relaxed text-neutral-800">
+          Não é uma pesquisa de preços de {c.nome}. Todas as cidades de {uf.nome} usam os mesmos fatores internos.
+          O preço contratado pode ser diferente. <Link href="/metodologia" className="font-semibold text-orange-800 underline">Veja a metodologia e as limitações</Link>.
         </p>
       </div>
 
@@ -100,8 +84,8 @@ export default async function CidadePage({ params }: { params: Promise<{ cidade:
         <table className="w-full text-left text-sm">
           <thead className="bg-orange-700 text-white">
             <tr>
-              <th className="px-4 py-3">Serviço em {c.nome}</th>
-              <th className="px-4 py-3">Preço de referência (2026)</th>
+              <th scope="col" className="px-4 py-3">Serviço</th>
+              <th scope="col" className="px-4 py-3">Estimativa estadual ({c.uf})</th>
             </tr>
           </thead>
           <tbody>
@@ -115,18 +99,18 @@ export default async function CidadePage({ params }: { params: Promise<{ cidade:
             ))}
           </tbody>
         </table>
-        <p className="bg-orange-50 px-4 py-2 text-xs text-neutral-500">
-          Referências calculadas a partir do CUB de {uf.nome} (Sinduscon, R$ {uf.cub}/m²) + padrões de consumo.
-          Orçamento real varia por profissional e condições do local.
+        <p className="bg-orange-50 px-4 py-3 text-sm text-neutral-700">
+          Valores calculados com bases internas de mão de obra e multiplicador estadual de {uf.multiplicadorMaoDeObra.toLocaleString("pt-BR")}.
+          Sem cotação em tempo real ou competência de pesquisa municipal. Materiais não estão incluídos nesta tabela.
         </p>
       </section>
 
       <section className="rounded-xl bg-neutral-900 p-6 text-white">
         <h2 className="text-xl font-bold">Precisa de obra em {c.nome}?</h2>
         <p className="mt-1 text-neutral-300">
-          Calcule o custo do seu serviço com os preços de {c.nome} e receba a lista de materiais no WhatsApp.
+          Simule materiais e mão de obra com a referência de {uf.nome}. Consulte grátis na página ou confirme seu número para receber uma cópia no WhatsApp.
         </p>
-        <Link href="/calculadoras" className="mt-4 inline-block rounded-lg bg-orange-600 px-5 py-2.5 font-semibold hover:bg-orange-700">
+        <Link href="/calculadoras" className="mt-4 inline-block rounded-lg bg-orange-700 px-5 py-3 font-semibold hover:bg-orange-800">
           Calcular minha obra grátis
         </Link>
       </section>

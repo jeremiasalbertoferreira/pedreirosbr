@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-export const metadata: Metadata = { title: "Contato e atendimento" };
+export const metadata: Metadata = { title: "Contato e atendimento", description: "Atendimento do PedreirosBR, operado pela JEAFEX Tecnologia Ltda. Suporte, cancelamento e solicitações sobre dados pelo e-mail contato@jeafex.com.br.", alternates: { canonical: "/contato" } };
 export default function Contato() {
   return <article className="mx-auto max-w-3xl space-y-6 py-12 text-ink-soft">
     <h1 className="font-display text-3xl font-bold text-ink">Contato e atendimento</h1>

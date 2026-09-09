@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import type { ServicoCalc } from "../oficios/types";
 import type { UFData } from "../lib/data/ufs";
 import type { CidadeData } from "../lib/data/cidades";
@@ -92,9 +93,10 @@ export function Calculadora({ servico, ufs, cidades, ufInicial, cidadeInicial }:
           <label className="block">
             <span className={labelCls}>Cidade <span className="font-normal text-ink-soft">(opcional)</span></span>
             <select className={inputCls} value={cidadeSel} onChange={(e) => { setCidadeSel(e.target.value); setResultado(null); }}>
-              <option value="">— média do estado —</option>
+              <option value="">— referência do estado —</option>
               {cidadesDaUF.map((c) => <option key={c.slug} value={c.slug}>{c.nome}</option>)}
             </select>
+            <span className="mt-2 block text-xs text-ink-soft">A cidade identifica o pedido; o cálculo usa os mesmos fatores para todo o estado.</span>
           </label>
           {servico.campos.map((c) => (
             <label key={c.id} className="block">
@@ -133,7 +135,7 @@ export function Calculadora({ servico, ufs, cidades, ufInicial, cidadeInicial }:
 
       {resultado && (
         <div className="rounded-2xl border-2 border-accent/30 bg-accent-soft p-6 sm:p-8">
-          <p className="text-sm font-semibold uppercase tracking-wide text-accent-dark">Estimativa para {territorio.nome}</p>
+          <p role="status" className="text-sm font-semibold uppercase tracking-wide text-accent-dark">Estimativa para {territorio.nome} — referência de {ufData.nome}</p>
           <p className="mt-2 font-display text-3xl font-black text-ink sm:text-4xl">
             {brlFmt(resultado.totalMin)} <span className="text-ink-soft">a</span> {brlFmt(resultado.totalMax)}
           </p>
@@ -159,9 +161,16 @@ export function Calculadora({ servico, ufs, cidades, ufInicial, cidadeInicial }:
               ))}
             </ul>
           </details>
-          <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-ink-soft">
-            {resultado.observacoes.map((o, i) => <li key={i}>{o}</li>)}
-          </ul>
+          <p className="mt-4 text-sm leading-relaxed text-ink-soft">
+            Estimativa preliminar, não cotação local. Confira medidas, preços e condições da obra com um profissional antes de comprar ou executar.
+          </p>
+          <details className="mt-3 rounded-xl bg-white p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-accent-dark">Premissas e limites deste cálculo</summary>
+            <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-ink-soft">
+              {resultado.observacoes.map((o, i) => <li key={i}>{o}</li>)}
+            </ul>
+            <Link href="/metodologia" className="mt-3 inline-block text-sm font-semibold text-accent-dark underline">Metodologia completa</Link>
+          </details>
           <WhatsappCapture
             servico={servico}
             territorio={territorio}

@@ -4,13 +4,12 @@ import { SITE_URL } from "../../oficios";
 import { UFS } from "../../lib/data/ufs";
 import { CIDADES } from "../../lib/data/cidades";
 import { CadastroProfissional } from "../../components/CadastroProfissional";
-import { JsonLd } from "../../components/JsonLd";
 
 
 export const metadata: Metadata = {
   title: "Para pedreiros: receba clientes de obra da sua cidade no WhatsApp",
   description:
-    "Entre grátis na fila da sua cidade. Quando a procura por pedreiro esquentar na sua região, você recebe os clientes direto no seu WhatsApp — com exclusividade por cidade.",
+    "Cadastro gratuito na fila. Oferta de R$ 97/mês quando houver demanda confirmada e vaga disponível. Um profissional por cidade, sem garantia de pedidos ou contratação.",
   alternates: { canonical: `${SITE_URL}/para-pedreiros` },
 };
 
@@ -23,30 +22,6 @@ export const metadata: Metadata = {
 export default function ParaPedreirosPage() {
   return (
     <div className="space-y-12">
-      <JsonLd
-        data={{
-          "@context": "https://schema.org",
-          "@type": "FAQPage",
-          mainEntity: [
-            {
-              "@type": "Question",
-              name: "Como recebo clientes de obra pelo PedreirosBR?",
-              acceptedAnswer: {
-                "@type": "Answer",
-                text: "Entre na fila da sua cidade com seu WhatsApp. Quando a procura por pedreiro na sua cidade esquentar, os primeiros da fila são chamados para receber os clientes direto no WhatsApp, com exclusividade por cidade.",
-              },
-            },
-            {
-              "@type": "Question",
-              name: "Quanto custa para o pedreiro?",
-              acceptedAnswer: {
-                "@type": "Answer",
-                text: "Entrar na fila é grátis. A assinatura custa R$ 97/mês e só será oferecida quando houver pedidos confirmados suficientes e a vaga exclusiva estiver disponível. Não há garantia de quantidade de pedidos ou contratação.",
-              },
-            },
-          ],
-        }}
-      />
 
       {/* Hero */}
       <section className="pt-6">
@@ -78,8 +53,8 @@ export default function ParaPedreirosPage() {
             },
             {
               n: "02",
-              t: "A cidade esquenta",
-              d: "Nossas páginas atraem quem quer fazer obra na sua cidade. Quando os pedidos de orçamento cruzam o limiar, o território abre.",
+              t: "A vaga fica disponível",
+              d: "Quando há pedidos confirmados suficientes e uma vaga disponível, o primeiro profissional elegível da fila recebe a oferta. Não há prazo garantido para isso.",
             },
             {
               n: "03",

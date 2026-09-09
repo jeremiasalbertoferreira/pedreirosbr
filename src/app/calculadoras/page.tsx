@@ -1,20 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { getOficioAtivo } from "../../oficios";
+import { getOficioAtivo, SITE_URL } from "../../oficios";
 
 const oficio = getOficioAtivo();
 
 export const metadata: Metadata = {
   title: "Calculadoras de obra grátis",
-  description: "Todas as calculadoras de obra: reboco, muro, pintura, telhado e reforma de banheiro com preços regionalizados e lista de materiais.",
+  description: "Simule reboco, muro, pintura, telhado e banheiro com fatores internos por estado e lista de materiais. Consulte grátis, sem cadastro para calcular.",
+  alternates: { canonical: `${SITE_URL}/calculadoras` },
 };
 
 export default function CalculadorasPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 py-8 sm:py-10">
       <h1 className="text-3xl font-extrabold text-neutral-900">Calculadoras de obra</h1>
       <p className="text-neutral-600">
-        Estimativas de materiais e mão de obra com preços da sua região. Resultado completo no seu WhatsApp, sem cadastro.
+        Estimativas preliminares de materiais e mão de obra com fatores por estado, não cotações locais.
+        Consulte grátis na página; para receber uma cópia no WhatsApp, confirme seu número.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
         {oficio.servicos.map((s) => (

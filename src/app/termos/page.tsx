@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-export const metadata: Metadata = { title: "Termos de uso" };
+export const metadata: Metadata = { title: "Termos de uso", description: "Condições de uso das calculadoras, pedidos e assinatura do PedreirosBR. Entenda a fila gratuita, a exclusividade por cidade e as regras de cancelamento.", alternates: { canonical: "/termos" } };
 export default function Termos() {
   return <article className="mx-auto max-w-3xl space-y-6 py-12 text-ink-soft">
     <h1 className="font-display text-3xl font-bold text-ink">Termos de uso do PedreirosBR</h1>

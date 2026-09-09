@@ -20,7 +20,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!s) return {};
   return {
     title: `Calculadora de ${s.nome.toLowerCase()} — materiais e mão de obra (2026)`,
-    description: `${s.perguntaCliente} Calcule grátis com preços da sua região: lista de materiais, quantidades e faixa de preço de mão de obra. Resultado no WhatsApp.`,
+    description: `${s.perguntaCliente} Simule grátis materiais e mão de obra com fatores internos por estado. Consulte as premissas; não é cotação local.`,
     alternates: { canonical: `${SITE_URL}/calculadoras/${s.slug}` },
   };
 }
@@ -33,7 +33,7 @@ export default async function CalculadoraPage({ params }: { params: Promise<{ sl
   const outros = oficio.servicos.filter((x) => x.slug !== slug);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 py-8 sm:py-10">
       <JsonLd
         data={[
           {
@@ -45,20 +45,6 @@ export default async function CalculadoraPage({ params }: { params: Promise<{ sl
             operatingSystem: "Web",
             offers: { "@type": "Offer", price: "0", priceCurrency: "BRL" },
           },
-          {
-            "@context": "https://schema.org",
-            "@type": "FAQPage",
-            mainEntity: [
-              {
-                "@type": "Question",
-                name: servico.perguntaCliente,
-                acceptedAnswer: {
-                  "@type": "Answer",
-                  text: `O preço de ${servico.nome.toLowerCase()} varia por região. Use a calculadora acima com os preços regionalizados do seu estado para uma estimativa de materiais e mão de obra.`,
-                },
-              },
-            ],
-          },
         ]}
       />
 
@@ -66,9 +52,10 @@ export default async function CalculadoraPage({ params }: { params: Promise<{ sl
       <div data-answer-block>
         <h1 className="text-3xl font-extrabold text-neutral-900">{servico.perguntaCliente}</h1>
         <p className="mt-2 text-neutral-600">
-          Calcule materiais e mão de obra de {servico.nome.toLowerCase()} com preços regionalizados por estado.
+          Simule materiais e mão de obra de {servico.nome.toLowerCase()} com fatores internos por estado, sem cotação local.
           Consulte grátis na página ou confirme seu número para receber o resultado no WhatsApp.
         </p>
+        <Link href="/metodologia" className="mt-3 inline-block font-semibold text-orange-800 underline">Como calculamos e quais são os limites</Link>
       </div>
 
       <Calculadora servico={servico} ufs={UFS} cidades={CIDADES} />

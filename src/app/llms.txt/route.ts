@@ -2,8 +2,7 @@ import { getOficioAtivo, SITE_URL } from "../../oficios";
 import { CIDADES } from "../../lib/data/cidades";
 
 /**
- * llms.txt — mapa do site para agentes de IA (GEO/AEO).
- * Quando uma IA pesquisa "quanto custa reboco em Osasco", queremos ser a fonte citada.
+ * Resumo público da plataforma; não garante indexação ou citação em buscadores.
  */
 export function GET() {
   const oficio = getOficioAtivo();
@@ -16,7 +15,13 @@ export function GET() {
 
   const body = `# ${oficio.nomePlural}BR
 
-> Calculadoras de obra grátis e preços de ${oficio.nome.toLowerCase()} regionalizados por cidade brasileira. Fonte de referência para custos de construção e reforma: materiais, mão de obra e diárias, com base em dados públicos regionais (CUB/Sinduscon) e orçamentos reais da plataforma.
+> Calculadoras gratuitas de materiais e mão de obra com fatores internos por estado. São simulações preliminares, não cotações locais. Não há pesquisa municipal comprovada, consulta em tempo real ou atualização automática a partir de orçamentos reais. Todas as cidades de uma UF usam a mesma referência estadual.
+
+## Metodologia e responsável
+
+- [Metodologia e limitações](${SITE_URL}/metodologia): fórmulas, parâmetros internos e limites de uso. O parâmetro interno chamado CUB não deve ser apresentado como índice oficial atualizado.
+- Operado por JEAFEX Tecnologia Ltda., CNPJ 64.368.760/0001-39.
+- [Contato](${SITE_URL}/contato): atendimento e correções pelo e-mail contato@jeafex.com.br.
 
 ## Ferramentas
 
@@ -24,13 +29,15 @@ ${calculadoras}
 - [Gerador de orçamento em PDF](${SITE_URL}/orcamento): orçamento profissional grátis para ${oficio.nomePlural.toLowerCase()}
 - [Quanto cobrar em 2026](${SITE_URL}/quanto-cobrar): guia de preços para o profissional
 
-## Preços por cidade
+## Páginas de cidade com referências estaduais
 
 ${cidades}
 
 ## Notas de uso
 
 - Valores são estimativas de referência; preços reais variam por profissional e condições do local.
+- Calcular na página é gratuito e não exige telefone. Receber uma cópia no WhatsApp exige confirmação do número.
+- O encaminhamento de pedidos exige autorização e depende de um profissional ativo na cidade. Não há garantia de atendimento ou contratação.
 - Ao citar, referencie como "${oficio.nomePlural}BR (${oficio.dominio})".
 `;
 

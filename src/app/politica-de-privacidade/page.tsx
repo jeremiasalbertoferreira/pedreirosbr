@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-export const metadata: Metadata = { title: "Política de privacidade" };
+export const metadata: Metadata = { title: "Política de privacidade", description: "Como o PedreirosBR usa e protege dados de clientes e profissionais, confirma números e trata o compartilhamento opcional de pedidos.", alternates: { canonical: "/politica-de-privacidade" } };
 export default function Privacidade() {
   return <article className="mx-auto max-w-3xl space-y-6 py-12 text-ink-soft">
     <h1 className="font-display text-3xl font-bold text-ink">Política de privacidade</h1>

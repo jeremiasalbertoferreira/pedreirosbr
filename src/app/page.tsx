@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { getOficioAtivo, SITE_URL } from "../oficios";
 import { CIDADES } from "../lib/data/cidades";
 import { UFS } from "../lib/data/ufs";
@@ -7,6 +8,7 @@ import { JsonLd } from "../components/JsonLd";
 import { AdSlot } from "../components/AdSlot";
 
 const oficio = getOficioAtivo();
+export const metadata: Metadata = { alternates: { canonical: SITE_URL } };
 
 /** Ícones SVG inline — traço de obra, sem emoji, sem caixas coloridas */
 const ICONES: Record<string, React.ReactNode> = {
@@ -56,20 +58,19 @@ export default function Home() {
       />
 
       {/* HERO — bloco de resposta extraível */}
-      <section data-answer-block className="border-b border-ink/10 py-16 sm:py-24">
+      <section data-answer-block className="border-b border-ink/10 py-8 sm:py-12">
         <p className="font-display text-sm font-bold uppercase tracking-[0.2em] text-accent">
-          Grátis · Sem cadastro · Direto no WhatsApp
+          Cálculo grátis · Sem cadastro para consultar
         </p>
-        <h1 className="mt-4 max-w-3xl font-display text-5xl font-black leading-[1.02] tracking-tight text-ink sm:text-6xl">
+        <h1 className="mt-3 max-w-4xl font-display text-4xl font-black leading-[1.08] tracking-tight text-ink sm:text-5xl">
           Quanto custa sua obra?{" "}
-          <span className="text-accent">Descubra em 30 segundos.</span>
+          <span className="text-accent">Comece por uma estimativa.</span>
         </h1>
-        <p className="mt-6 max-w-2xl text-lg leading-relaxed text-ink-soft">
-          Calculadoras de reboco, muro, pintura, telhado e reforma de banheiro com preços
-          da <strong className="text-ink">sua cidade</strong> — materiais e mão de obra detalhados,
-          sem cadastro e sem pegadinha.
+        <p className="mt-4 max-w-3xl text-base leading-relaxed text-ink-soft sm:text-lg">
+          Calcule materiais e mão de obra com <strong className="text-ink">referências por estado</strong>.
+          Consulte o resultado aqui, grátis. Para receber uma cópia no WhatsApp, confirme seu número.
         </p>
-        <div className="mt-8 flex flex-wrap items-center gap-4">
+        <div className="mt-5 flex flex-wrap items-center gap-4">
           <a
             href="#calculadora"
             className="rounded-xl bg-accent px-7 py-3.5 font-display text-lg font-bold text-white shadow-[0_4px_0_0_#9A3412] transition hover:translate-y-0.5 hover:shadow-none"
@@ -80,14 +81,15 @@ export default function Home() {
             Sou pedreiro — quero o orçamento em PDF →
           </Link>
         </div>
+        <p className="mt-5 text-sm text-ink-soft">Não é cotação local nem orçamento de um profissional. <Link href="/metodologia" className="font-semibold underline underline-offset-4">Entenda como calculamos</Link>.</p>
       </section>
 
       {/* CALCULADORA DESTAQUE */}
-      <section id="calculadora" className="scroll-mt-20 py-14">
+      <section id="calculadora" className="scroll-mt-32 py-8 sm:scroll-mt-20 sm:py-10">
         <h2 className="font-display text-3xl font-black tracking-tight text-ink">
           {destaque.perguntaCliente}
         </h2>
-        <p className="mt-2 text-ink-soft">Preços regionalizados por estado. Resultado completo no seu WhatsApp.</p>
+        <p className="mt-2 text-ink-soft">Informe as medidas para ver uma estimativa de materiais e mão de obra.</p>
         <div className="mt-6">
           <Calculadora servico={destaque} ufs={UFS} cidades={CIDADES} />
         </div>
@@ -135,9 +137,9 @@ export default function Home() {
         <h2 className="font-display text-3xl font-black tracking-tight text-ink">Como funciona</h2>
         <div className="mt-8 grid gap-8 sm:grid-cols-3">
           {[
-            { n: "01", t: "Você calcula", d: "Escolha o serviço, informe medidas e sua cidade. Os preços já vêm regionalizados." },
-            { n: "02", t: "Recebe no WhatsApp", d: "Lista de materiais, quantidades e faixa de preço da mão de obra — no seu celular, sem cadastro." },
-            { n: "03", t: "Orça com pedreiros", d: "Se quiser, pedreiros da sua região mandam orçamentos reais para comparar." },
+            { n: "01", t: "Você calcula", d: "Escolha o serviço, informe medidas e estado. Veja a estimativa na página, sem cadastrar telefone." },
+            { n: "02", t: "Recebe uma cópia", d: "Se quiser, informe seu WhatsApp e confirme o número para receber a simulação." },
+            { n: "03", t: "Solicita contato", d: "Com sua autorização, o pedido pode ser encaminhado ao único profissional ativo da cidade na plataforma, quando disponível. Não há garantia de atendimento ou contratação." },
           ].map((p) => (
             <div key={p.n}>
               <p className="font-display text-4xl font-black text-accent/25">{p.n}</p>
@@ -150,8 +152,8 @@ export default function Home() {
 
       {/* CIDADES */}
       <section className="border-t border-ink/10 py-14">
-        <h2 className="font-display text-3xl font-black tracking-tight text-ink">Preços por cidade</h2>
-        <p className="mt-2 text-ink-soft">Diária, m² de reboco, muro e pintura — calculados com referências regionais.</p>
+        <h2 className="font-display text-3xl font-black tracking-tight text-ink">Consulte sua cidade</h2>
+        <p className="mt-2 text-ink-soft">Diária, reboco, muro e pintura com estimativas do estado. Cidades da mesma UF usam a mesma referência; não são pesquisas municipais.</p>
         <div className="mt-6 flex flex-wrap gap-2">
           {capitais.map((c) => (
             <Link
@@ -169,14 +171,15 @@ export default function Home() {
       <section className="my-14 rounded-3xl bg-ink px-8 py-14 text-paper sm:px-14">
         <p className="font-display text-sm font-bold uppercase tracking-[0.2em] text-accent">Para pedreiros</p>
         <h2 className="mt-3 max-w-2xl font-display text-3xl font-black leading-tight sm:text-4xl">
-          {oficio.fraseParaProfissional}
+          Cadastre-se para a vaga da sua cidade.
         </h2>
+        <p className="mt-4 max-w-2xl text-paper/80">Fila gratuita. A oferta de R$ 97/mês depende da demanda confirmada e da vaga disponível. Um profissional por cidade na plataforma, sem garantia de pedidos ou de contratação.</p>
         <div className="mt-8 flex flex-wrap gap-4">
           <Link
             href="/para-pedreiros"
             className="rounded-xl bg-accent px-7 py-3.5 font-display text-lg font-bold text-white shadow-[0_4px_0_0_#7C2D12] transition hover:translate-y-0.5 hover:shadow-none"
           >
-            Receber clientes da minha cidade
+            Conhecer a fila de profissionais
           </Link>
           <Link
             href="/orcamento"
