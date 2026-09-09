@@ -1,6 +1,7 @@
 import { prisma } from "./db";
 import type { OutboundMessage } from "@prisma/client";
-import { enviarMensagemTexto, enviarNovoLead, enviarConviteTerritorio, whatsappConfigurado } from "./whatsapp";
+import { avisosFinanceirosHabilitados, enviarAvisoFinanceiro, enviarMensagemTexto, enviarNovoLead, enviarConviteTerritorio, whatsappConfigurado } from "./whatsapp";
+import { getCidade } from "./data/cidades";
 
 /** Sem repetição cega após timeout: SENT tem ID, REVIEW exige conciliação. */
 export async function processarOutbox() {
@@ -10,6 +11,7 @@ export async function processarOutbox() {
   const pending = await prisma.$queryRaw<OutboundMessage[]>`
     SELECT * FROM "OutboundMessage"
     WHERE state = 'PENDING' AND "nextAttemptAt" <= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::timestamp(3)
+      AND (kind <> 'BILLING' OR ${avisosFinanceirosHabilitados()})
     ORDER BY "createdAt" ASC LIMIT 10
   `;
   let processed = 0;
@@ -17,16 +19,21 @@ export async function processarOutbox() {
     const claimed = await prisma.outboundMessage.updateMany({ where: { key: job.key, state: "PENDING" }, data: { state: "SENDING", attempts: { increment: 1 } } });
     if (!claimed.count) continue;
     const payload = job.payload as Record<string, string>;
+    let billingCity = "";
     if (job.kind === "BILLING") {
       const billing = await prisma.billingSubscription.findUnique({ where: { professionalId: payload.professionalId }, include: { professional: true } });
       const valid = billing?.subscriptionId === payload.subscriptionId && billing.professional.whatsapp === job.recipient &&
-        (payload.action === "CANCELLED" ? billing.state === "CANCELLED" :
+        (payload.action === "CANCELLED" ? billing.state === "CANCELLED" && billing.cancellationState === "CONFIRMED" :
           payload.action === "PAID" && billing.state === "READY" && billing.activePaymentId === payload.paymentId &&
           billing.professional.status === "assinante" && !["PROCESSING", "SUBMITTED", "REVIEW"].includes(billing.cancellationState ?? ""));
       if (!valid) {
         await prisma.outboundMessage.update({ where: { key: job.key }, data: { state: "REVIEW" } });
         continue;
       }
+      // Derivar da assinatura verificada, inclusive para jobs antigos sem city.
+      // Nunca extrair parâmetros do texto livre armazenado no payload.
+      const city = getCidade(billing.territorySlug);
+      billingCity = city ? `${city.nome}/${city.uf}` : billing.territorySlug;
     }
     if (job.kind === "LEAD") {
       const lead = await prisma.lead.findUnique({ where: { id: payload.leadId } });
@@ -37,9 +44,11 @@ export async function processarOutbox() {
         continue;
       }
     }
-    const result = ["TEXT", "BILLING"].includes(job.kind) ? await enviarMensagemTexto(job.recipient, payload.text)
+    const result = job.kind === "BILLING" ? await enviarAvisoFinanceiro(job.recipient, payload.action, billingCity)
+      : job.kind === "TEXT" ? await enviarMensagemTexto(job.recipient, payload.text)
       : job.kind === "LEAD" ? await enviarNovoLead(job.recipient, payload.city, payload.summary, payload.phone)
-      : await enviarConviteTerritorio(job.recipient, payload.name, payload.city, 1);
+      : job.kind === "INVITE" ? await enviarConviteTerritorio(job.recipient, payload.name, payload.city, 1)
+      : { ok: false, messageId: undefined };
     await prisma.outboundMessage.update({ where: { key: job.key }, data: {
       state: result.ok && result.messageId ? "SENT" : "REVIEW", messageId: result.messageId,
     } });

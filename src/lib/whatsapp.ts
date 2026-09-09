@@ -25,6 +25,24 @@ export function whatsappConfigurado(): boolean {
   return !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID);
 }
 
+/** Liberação operacional separada da cobrança; padrão fechado até homologação. */
+export function avisosFinanceirosHabilitados(): boolean {
+  return process.env.WHATSAPP_BILLING_TEMPLATES_ENABLED === "true";
+}
+
+/** Nomes e parâmetro correspondem aos textos revisados e submetidos à Meta. */
+export async function enviarAvisoFinanceiro(
+  zap: string, acao: string, cidade: string
+): Promise<ResultadoEnvio> {
+  if (!avisosFinanceirosHabilitados()) return { ok: false, motivo: "avisos_financeiros_desabilitados" };
+  if (!["PAID", "CANCELLED"].includes(acao) || typeof cidade !== "string" || !cidade.trim() || cidade.length > 200) {
+    return { ok: false, motivo: "aviso_financeiro_invalido" };
+  }
+  return enviarTemplate(zap, acao === "PAID" ? "pagamento_confirmado" : "assinatura_cancelada", [
+    { type: "text", text: cidade.trim() },
+  ]);
+}
+
 /** Normaliza para o formato internacional só dígitos: 55 + DDD + número. */
 export function paraFormatoInternacional(zap: string): string {
   const d = zap.replace(/\D/g, "");

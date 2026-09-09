@@ -45,7 +45,7 @@ beforeEach(async () => {
     territorySlug: 'sao-paulo-sp', cpf: billingOptions.cpf, status: 'contatado', verifiedAt: new Date() } });
   await prisma.territory.create({ data: { slug: 'sao-paulo-sp', nome: 'São Paulo', tipo: 'cidade', uf: 'SP', assinaturaAtiva: true } });
   Object.assign(process.env, { WHATSAPP_APP_SECRET: 'test-app-secret', WHATSAPP_PHONE_NUMBER_ID: 'test-phone',
-    WHATSAPP_VERIFY_TOKEN: 'test-verify', WHATSAPP_TOKEN: 'test-token', ASAAS_ENV: 'sandbox',
+    WHATSAPP_VERIFY_TOKEN: 'test-verify', WHATSAPP_TOKEN: 'test-token', WHATSAPP_BILLING_TEMPLATES_ENABLED: 'true', ASAAS_ENV: 'sandbox',
     ASAAS_API_KEY: 'test-key', ASAAS_BILLING_ENABLED: 'true', ASAAS_WEBHOOK_TOKEN: 'test-webhook-token' });
   calls = []; mode = '';
   global.fetch = async (url, init) => {
@@ -54,6 +54,8 @@ beforeEach(async () => {
     // Nenhuma rede real: toda rota inesperada interrompe o teste.
     if (u.hostname === 'graph.facebook.com' && u.pathname.endsWith('/messages')) {
       if (mode === 'message-failure') return new Response('{}', { status: 500 });
+      if (mode === 'message-timeout') throw new Error('timeout depois de aceitar mensagem');
+      if (mode === 'message-no-id') return json({ messages: [] });
       return json({ messages: [{ id: 'outbound-test-' + calls.length }] });
     }
     assert.equal(u.hostname, 'api-sandbox.asaas.com');
@@ -450,10 +452,105 @@ test('cancelamento fora de ordem é terminal e bloqueia aviso de ativação aind
   await processarOutbox();
   const sent = calls.filter(c => c.path.endsWith('/messages'));
   assert.equal(sent.length, 1);
-  assert.match(sent[0].body.text.body, /Cancelamento confirmado/);
+  assert.equal(sent[0].body.type, 'template');
+  assert.equal(sent[0].body.template.name, 'assinatura_cancelada');
+  assert.equal(sent[0].body.text, undefined);
   assert.equal(await prisma.territorySeat.count(), 0);
   assert.equal((await prisma.billingSubscription.findFirst()).cancellationState, 'CONFIRMED');
   assert.equal(await prisma.outboundMessage.count({where:{state:'REVIEW'}}), 1);
+});
+test('aviso financeiro usa template pt_BR e cidade da assinatura, nunca texto legado', async () => {
+  const { processarOutbox } = require('../src/lib/outbox.ts');
+  await gerarCobrancaTerritorio(billingOptions);
+  await asaas.POST(asaasRequest('PAYMENT_RECEIVED', 'template-paid'));
+  const job = await prisma.outboundMessage.findFirst();
+  await prisma.outboundMessage.update({ where: { key: job.key }, data: {
+    payload: { ...job.payload, text: 'Texto legado que nao deve ser enviado', city: 'Cidade incorreta' },
+  } });
+  await Promise.all([processarOutbox(), processarOutbox(), processarOutbox()]);
+  const sent = calls.filter(c => c.path.endsWith('/messages'));
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0].body, {
+    messaging_product: 'whatsapp', to: '5511900000001', type: 'template',
+    template: { name: 'pagamento_confirmado', language: { code: 'pt_BR' },
+      components: [{ type: 'body', parameters: [{ type: 'text', text: 'São Paulo/SP' }] }] },
+  });
+  assert.equal((await prisma.outboundMessage.findUnique({where:{key:job.key}})).attempts, 1);
+});
+test('trava financeira ausente ou falsa preserva fila sem tentativas nem bloqueio de outros avisos', async () => {
+  const { processarOutbox } = require('../src/lib/outbox.ts');
+  const { enviarAvisoFinanceiro } = require('../src/lib/whatsapp.ts');
+  await gerarCobrancaTerritorio(billingOptions);
+  await asaas.POST(asaasRequest('PAYMENT_RECEIVED', 'gated-paid'));
+  const job = await prisma.outboundMessage.findFirst();
+  await prisma.outboundMessage.createMany({ data: Array.from({ length: 12 }, (_, i) => ({
+    key: 'gated-extra-' + i, kind: 'BILLING', recipient: job.recipient, payload: job.payload,
+    createdAt: new Date('2020-01-01'),
+  })) });
+  await prisma.outboundMessage.create({ data: { key: 'unblocked-text', kind: 'TEXT',
+    recipient: job.recipient, payload: { text: 'Resposta solicitada de teste' } } });
+  delete process.env.WHATSAPP_BILLING_TEMPLATES_ENABLED;
+  assert.equal((await enviarAvisoFinanceiro(job.recipient, 'PAID', 'São Paulo/SP')).ok, false);
+  assert.equal((await processarOutbox()).processed, 1);
+  for (const value of ['false', 'TRUE', '1']) {
+    process.env.WHATSAPP_BILLING_TEMPLATES_ENABLED = value;
+    assert.equal((await processarOutbox()).processed, 0);
+  }
+  assert.equal(await prisma.outboundMessage.count({where:{kind:'BILLING',state:'PENDING',attempts:0}}), 13);
+  assert.equal(calls.filter(c => c.path.endsWith('/messages')).length, 1);
+  assert.equal(calls.find(c => c.path.endsWith('/messages')).body.type, 'text');
+});
+test('aviso financeiro pendente pode retomar após liberação sem depender de habilitar cobranças', async () => {
+  const { processarOutbox } = require('../src/lib/outbox.ts');
+  await gerarCobrancaTerritorio(billingOptions);
+  await asaas.POST(asaasRequest('PAYMENT_RECEIVED', 'resume-paid'));
+  process.env.WHATSAPP_BILLING_TEMPLATES_ENABLED = 'false';
+  assert.equal((await processarOutbox()).processed, 0);
+  process.env.ASAAS_BILLING_ENABLED = 'false';
+  process.env.WHATSAPP_BILLING_TEMPLATES_ENABLED = 'true';
+  assert.equal((await processarOutbox()).processed, 1);
+  assert.equal((await prisma.outboundMessage.findFirst()).state, 'SENT');
+  assert.equal(subscriptionPosts().length, 1); // somente criação fictícia anterior à trava
+});
+for (const failureMode of ['message-timeout', 'message-no-id']) {
+  test(`template financeiro ${failureMode} exige revisão sem repetição ou fallback em texto`, async () => {
+    const { processarOutbox } = require('../src/lib/outbox.ts');
+    await gerarCobrancaTerritorio(billingOptions);
+    await asaas.POST(asaasRequest('PAYMENT_RECEIVED', failureMode));
+    mode = failureMode;
+    await processarOutbox();
+    await processarOutbox();
+    const job = await prisma.outboundMessage.findFirst();
+    assert.equal(job.state, 'REVIEW');
+    assert.equal(job.attempts, 1);
+    assert.equal(job.messageId, null);
+    const sent = calls.filter(c => c.path.endsWith('/messages'));
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].body.type, 'template');
+  });
+}
+test('template financeiro com destinatário divergente não é enviado', async () => {
+  const { processarOutbox } = require('../src/lib/outbox.ts');
+  await gerarCobrancaTerritorio(billingOptions);
+  await asaas.POST(asaasRequest('PAYMENT_RECEIVED', 'wrong-recipient'));
+  await prisma.outboundMessage.updateMany({data:{recipient:'11900000002'}});
+  await processarOutbox();
+  assert.equal((await prisma.outboundMessage.findFirst()).state, 'REVIEW');
+  assert.equal(calls.filter(c => c.path.endsWith('/messages')).length, 0);
+});
+test('remetente financeiro recusa ação ou cidade inválida sem rede', async () => {
+  const { enviarAvisoFinanceiro } = require('../src/lib/whatsapp.ts');
+  for (const [action, city] of [['OTHER', 'São Paulo/SP'], ['PAID', '  '], ['CANCELLED', 'x'.repeat(201)]]) {
+    assert.equal((await enviarAvisoFinanceiro(billingOptions.whatsapp, action, city)).ok, false);
+  }
+  assert.equal(calls.length, 0);
+});
+test('kind desconhecido da outbox não é tratado como convite', async () => {
+  const { processarOutbox } = require('../src/lib/outbox.ts');
+  await prisma.outboundMessage.create({data:{key:'unknown-kind',kind:'UNKNOWN',recipient:billingOptions.whatsapp,payload:{}}});
+  await processarOutbox();
+  assert.equal((await prisma.outboundMessage.findFirst()).state, 'REVIEW');
+  assert.equal(calls.length, 0);
 });
 test('cancelamento exige pedido prévio e confirmação do mesmo titular pelo webhook autenticado', async () => {
   await gerarCobrancaTerritorio(billingOptions);
