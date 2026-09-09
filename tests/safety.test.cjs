@@ -125,6 +125,47 @@ test('cadastro sem consentimento e excesso de tentativas são bloqueados', async
   assert.equal((await route.POST(publicRequest('profissional', {...input, consent: true}))).status, 429);
   assert.equal(calls.length, 0);
 });
+test('confirmação vencida orienta sem validar lead e um novo link continua funcionando', async () => {
+  const route = require('../src/app/api/lead/route.ts');
+  const input = { whatsapp: '11900000002', territorySlug: 'sao-paulo-sp', uf: 'SP', servico: 'reboco', resumo: 'Resumo privado', materials: '1 saco', consentVersion: '2026-09-08', quoteConsent: true };
+  const response = await route.POST(publicRequest('lead', input));
+  const command = new URL((await response.json()).verificationUrl).searchParams.get('text');
+  await prisma.verificationRequest.updateMany({ data: { expiresAt: new Date(Date.now() - 60000) } });
+  await meta.POST(request(payload('expired', command, 'test-phone', '5511900000002')));
+  await meta.POST(request(payload('expired-retry', command, 'test-phone', '5511900000002')));
+  const expired = await prisma.verificationRequest.findFirst();
+  assert.equal(expired.consumedAt, null);
+  assert.equal((await prisma.lead.findFirst()).verifiedAt, null);
+  assert.equal((await prisma.territory.findUnique({ where: { slug: 'sao-paulo-sp' } })).leads, 0);
+  assert.equal(await prisma.outboundMessage.count(), 1);
+  assert.ok(calls.some(c => c.body?.text?.body.includes('validade de 30 minutos')));
+  assert.equal(calls.some(c => c.body?.text?.body.includes('Resumo privado')), false);
+  assert.equal(subscriptionPosts().length, 0);
+  const renewed = await route.POST(publicRequest('lead', input));
+  const newCommand = new URL((await renewed.json()).verificationUrl).searchParams.get('text');
+  await meta.POST(request(payload('renewed', newCommand, 'test-phone', '5511900000002')));
+  assert.equal(await prisma.lead.count({ where: { verifiedAt: { not: null } } }), 1);
+});
+test('confirmações inválidas e de outro titular recebem aviso genérico limitado e sem dados privados', async () => {
+  const { criarVerificacao, confirmarWhatsApp } = require('../src/lib/verification.ts');
+  const url = await criarVerificacao('PROFESSIONAL', billingOptions.whatsapp, { nome: 'Nome privado', territorySlug: 'sao-paulo-sp' });
+  const command = new URL(url).searchParams.get('text');
+  await Promise.all([
+    confirmarWhatsApp('5511900000002', command),
+    confirmarWhatsApp('5511900000002', 'CONFIRMAR ' + 'a'.repeat(48)),
+    confirmarWhatsApp('5511900000002', 'CONFIRMAR incompleto'),
+  ]);
+  assert.equal(await prisma.outboundMessage.count(), 1);
+  const warning = await prisma.outboundMessage.findFirst();
+  assert.equal(warning.recipient, '5511900000002');
+  assert.equal(JSON.stringify(warning).includes('Nome privado'), false);
+  assert.equal(JSON.stringify(warning).includes(billingOptions.whatsapp), false);
+  assert.equal((await prisma.verificationRequest.findFirst()).consumedAt, null);
+  assert.equal((await prisma.professional.findUnique({ where: { id: billingOptions.professionalId } })).nome, 'Teste');
+  assert.equal(await prisma.billingSubscription.count(), 0);
+  assert.equal(calls.length, 0);
+  assert.equal(await confirmarWhatsApp('5511900000002', 'QUERO'), false);
+});
 test('lead só conta como demanda após confirmação e autorização de compartilhamento', async () => {
   const route = require('../src/app/api/lead/route.ts');
   const input = { whatsapp: '11900000002', territorySlug: 'sao-paulo-sp', uf: 'SP', servico: 'reboco', resumo: 'Teste', materials: '1 saco', consentVersion: '2026-09-08', quoteConsent: true };

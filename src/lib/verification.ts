@@ -15,13 +15,27 @@ export async function criarVerificacao(kind: string, whatsapp: string, data: Pri
 }
 
 export async function confirmarWhatsApp(sender: string, text: string): Promise<boolean> {
+  if (!/^confirmar\b/i.test(text.trim())) return false;
   const match = /^confirmar ([a-f0-9]{48})$/i.exec(text.trim());
-  if (!match) return false;
-  const tokenHash = createHash("sha256").update(match[1]).digest("hex");
+  const tokenHash = match ? createHash("sha256").update(match[1]).digest("hex") : null;
   const whatsapp = sender.slice(2);
   await prisma.$transaction(async tx => {
-    const request = await tx.verificationRequest.findUnique({ where: { tokenHash } });
-    if (!request || request.whatsapp !== whatsapp || request.expiresAt < new Date() || request.consumedAt) return;
+    const request = tokenHash ? await tx.verificationRequest.findUnique({ where: { tokenHash } }) : null;
+    // A repeated, already completed confirmation must not produce another reply.
+    if (request?.whatsapp === whatsapp && request.consumedAt) return;
+    if (!request || request.whatsapp !== whatsapp || request.expiresAt <= new Date()) {
+      // Uniform guidance avoids exposing whether a token exists or who owns it.
+      // At most one queued warning per sender/hour, including concurrent retries.
+      const warningKey = createHash("sha256").update(`${sender}:${Math.floor(Date.now() / 3600000)}`).digest("hex");
+      await tx.outboundMessage.createMany({ skipDuplicates: true, data: [{
+        key: `verification-help:${warningKey}`, recipient: sender, kind: "TEXT", payload: {
+          text: "Não foi possível usar esta confirmação. O link pode ter vencido (validade de 30 minutos), estar incompleto ou ter sido aberto com outro número. Volte à calculadora em https://pedreirosbr.com.br e solicite um novo link. Para cadastro de profissional, acesse https://pedreirosbr.com.br/para-pedreiros. Envie a mensagem completa pelo mesmo WhatsApp informado no formulário. Esta tentativa não confirmou nem alterou seu cadastro e não gerou cobrança.",
+        },
+      }] });
+      return;
+    }
+    // A request can only have been loaded when its token hash was parsed.
+    if (!tokenHash) return;
     const claimed = await tx.verificationRequest.updateMany({ where: { tokenHash, consumedAt: null }, data: { consumedAt: new Date() } });
     if (!claimed.count) return;
     const data = request.data as Record<string, string>;
