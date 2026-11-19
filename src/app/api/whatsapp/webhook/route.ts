@@ -8,6 +8,8 @@ import { processarUmaVez } from "../../../../lib/webhook-receipt";
 import { mensagensDoNumero, type MensagemMeta } from "../../../../lib/whatsapp-payload";
 import { confirmarWhatsApp } from "../../../../lib/verification";
 import { processarOutbox, registrarEntregas } from "../../../../lib/outbox";
+import { canonicoWhatsApp } from "../../../../lib/public-request";
+import { createHash } from "node:crypto";
 
 export const runtime = "nodejs";
 
@@ -80,11 +82,13 @@ async function processarResposta(de: string, texto: string) {
   const normalizado = texto.trim().toLowerCase();
   const comandoCancelamento = ["cancelar assinatura", "confirmar cancelamento"].includes(normalizado);
   if (!comandoCancelamento && await confirmarWhatsApp(de, texto)) return;
-  const zap = de.slice(2); // payload validado; somente remetente brasileiro completo
+  const nacional = de.slice(2); // payload validado; somente remetente brasileiro completo
+  // A Meta pode identificar o mesmo celular sem o nono dígito; o cadastro guarda a forma canônica.
+  const zap = canonicoWhatsApp(nacional);
 
   // Contatados (convite) e interessados (aguardando CPF/pagamento) nos interessam
   const profissionais = await prisma.professional.findMany({
-    where: { whatsapp: { in: [zap, de] } }, take: 2,
+    where: { whatsapp: { in: [...new Set([zap, nacional, de])] } }, take: 2,
   });
   if (profissionais.length > 1) throw new Error("remetente_ambiguo");
   const profissional = profissionais[0];
@@ -203,7 +207,8 @@ async function processarResposta(de: string, texto: string) {
     }
 
     await cobrarComLink();
-  } else if (/\b(sair|parar|nao|não)\b/.test(normalizado)) {
+  } else if (/^(sair|parar|n[aã]o|n[aã]o quero)[\s!.]*$/.test(normalizado)) {
+    // Só a recusa isolada tira da fila. "Não entendi, como funciona?" é dúvida, não recusa.
     await prisma.professional.update({
       where: { id: profissional.id },
       data: { status: "recusado" },
@@ -212,6 +217,17 @@ async function processarResposta(de: string, texto: string) {
       de,
       "Sem problema! Tiramos você da fila dessa cidade. Se mudar de ideia, é só se cadastrar de novo em pedreirosbr.com.br/para-pedreiros 👷"
     );
+  } else if (cobrancaAutomaticaHabilitada()) {
+    // Dúvida ou texto livre: orienta sem alterar o cadastro e sem registrar o conteúdo.
+    // Com a ativação comercial desligada não há o que orientar; a mensagem é ignorada.
+    // No máximo uma orientação por remetente a cada hora, mesmo com reenvios concorrentes.
+    const chave = createHash("sha256").update(`${de}:${Math.floor(Date.now() / 3600000)}`).digest("hex");
+    const texto = profissional.status === "interessado" && !profissional.cpf
+      ? "Para continuar a ativação, envie apenas o seu CPF (só os números). Se não quiser mais, responda SAIR. Outras dúvidas: pedreirosbr.com.br/para-pedreiros"
+      : "Para aceitar a vaga da sua cidade, responda apenas QUERO. Se não tiver interesse, responda SAIR. Como funciona: pedreirosbr.com.br/para-pedreiros";
+    await prisma.outboundMessage.createMany({ skipDuplicates: true, data: [{
+      key: `invite-help:${chave}`, recipient: de, kind: "TEXT", payload: { text: texto },
+    }] });
   }
-  // Outras mensagens são ignoradas, sem registrar seu conteúdo.
+  // Demais mensagens são ignoradas, sem registrar seu conteúdo.
 }

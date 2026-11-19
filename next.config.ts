@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone", // imagem Docker enxuta no Coolify
   poweredByHeader: false,
+  // O site não usa next/image. Desligar o otimizador fecha a rota /_next/image.
+  images: { unoptimized: true },
   redirects() {
     return [{
       // Consolidate public pages only. Webhooks/jobs retain their existing URLs.

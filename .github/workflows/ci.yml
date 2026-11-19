@@ -1,0 +1,61 @@
+name: CI
+
+# Roda em todo pull request e em todo envio para main.
+# Nenhum segredo de produção é usado: o banco é descartável e a rede de Meta/Asaas é simulada nos testes.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: pedreirosbr_safety
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d pedreirosbr_safety"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/pedreirosbr_safety
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Lint
+        run: npm run lint
+      - name: Tipos
+        run: npx tsc --noEmit
+      - name: Migrations no banco descartável
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/pedreirosbr_safety
+      - name: Testes de segurança e fluxo
+        run: npm run test:safety
+      - name: Testes de SEO
+        run: npm run test:seo
+      - name: Build de produção
+        run: npm run build
+      - name: Dependências sem falha alta ou crítica
+        run: npm audit --omit=dev --audit-level=high

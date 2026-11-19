@@ -98,3 +98,10 @@ test('mobile navigation stays visible and www redirect excludes APIs and Next as
   assert.match(rule.source, /api/);
   assert.match(rule.source, /_next/);
 });
+
+test('JSON-LD não permite fechar a tag de script com dados', () => {
+  const { JsonLd } = require('../src/components/JsonLd.tsx');
+  const html = render(React.createElement(JsonLd, { data: { name: '</script><script>alert(1)</script>' } }));
+  assert.equal(html.match(/<\/script>/g).length, 1);
+  assert.ok(html.includes('\\u003c/script>'));
+});

@@ -56,6 +56,8 @@ beforeEach(async () => {
     // Nenhuma rede real: toda rota inesperada interrompe o teste.
     if (u.hostname === 'graph.facebook.com' && u.pathname.endsWith('/messages')) {
       if (mode === 'message-failure') return new Response('{}', { status: 500 });
+      // Recusa temporária declarada pela própria Meta: nada foi entregue.
+      if (mode === 'message-transient') return new Response(JSON.stringify({ error: { code: 131016 } }), { status: 503 });
       if (mode === 'message-timeout') throw new Error('timeout depois de aceitar mensagem');
       if (mode === 'message-no-id') return json({ messages: [] });
       return json({ messages: [{ id: 'outbound-test-' + calls.length }] });
@@ -505,7 +507,8 @@ test('CPF não é coletado pelo webhook enquanto cobrança estiver desabilitada'
 });
 test('não quero não gera cobrança; pedido de informação também não', async () => {
   await meta.POST(request(payload('question', 'quero saber os preços')));
-  assert.equal(calls.length, 0);
+  // A dúvida recebe só uma orientação por WhatsApp; nenhuma chamada financeira.
+  assert.equal(calls.filter(c => !c.path.endsWith('/messages')).length, 0);
   await meta.POST(request(payload('optout', 'não quero')));
   assert.equal(subscriptionPosts().length, 0);
   assert.equal((await prisma.professional.findUnique({ where: { id: billingOptions.professionalId } })).status, 'recusado');
@@ -767,4 +770,181 @@ test('não quero e cancelar genérico não encerram contrato; cancelamento pende
   await cancelarAssinatura(billingOptions.professionalId,false);
   assert.equal((await gerarCobrancaTerritorio(billingOptions)).ok,false);
   assert.equal(subscriptionPosts().length,1);
+});
+
+
+// ---------------------------------------------------------------------------
+// Auditoria de 19/11/2026 — cada teste abaixo falhava antes da correção.
+// Dados fictícios; nenhuma rede real.
+// ---------------------------------------------------------------------------
+function publicRequestIp(route, body, ip) {
+  return new NextRequest('https://pedreirosbr.com.br/api/' + route, { method: 'POST',
+    headers: { 'content-type': 'application/json', origin: 'https://pedreirosbr.com.br', 'x-forwarded-for': '203.0.113.9, ' + ip }, body: JSON.stringify(body) });
+}
+function jobRequest() {
+  process.env.INTERNAL_JOB_TOKEN = 'job-token';
+  return new NextRequest('http://localhost/api/internal/jobs', { method: 'POST', headers: { authorization: 'Bearer job-token' } });
+}
+const leadBody = (whatsapp, extra = {}) => ({ servico: 'reboco', territorySlug: 'sao-paulo-sp', uf: 'SP', whatsapp,
+  quoteConsent: false, consentVersion: '2026-09-08', resumo: 'x', materials: 'y', ...extra });
+
+test('nono dígito: forma canônica do telefone', () => {
+  const { normalizarWhatsApp } = require('../src/lib/public-request.ts');
+  assert.equal(normalizarWhatsApp('(35) 98765-4321'), '35987654321');
+  assert.equal(normalizarWhatsApp('3587654321'), '35987654321'); // celular digitado no formato antigo
+  assert.equal(normalizarWhatsApp('+55 11 98765-4321'), '11987654321');
+  assert.equal(normalizarWhatsApp('3532221111'), '3532221111'); // fixo não ganha o 9
+  assert.equal(normalizarWhatsApp('123'), null);
+});
+test('nono dígito: cliente de DDD 35 confirma mesmo com remetente da Meta sem o 9', async () => {
+  const route = require('../src/app/api/lead/route.ts');
+  const r = await route.POST(publicRequest('lead', leadBody('35987654321', { territorySlug: 'pocos-de-caldas-mg', uf: 'MG' })));
+  const command = new URL((await r.json()).verificationUrl).searchParams.get('text');
+  assert.equal((await meta.POST(request(payload('nono-lead', command, 'test-phone', '553587654321')))).status, 200);
+  assert.ok((await prisma.lead.findFirst({ where: { whatsapp: '35987654321' } })).verifiedAt);
+  const reply = await prisma.outboundMessage.findFirst();
+  assert.match(reply.key, /^verification:/);
+  assert.equal(reply.recipient, '553587654321'); // responde ao identificador que a Meta enviou
+});
+test('nono dígito: profissional de DDD 31 confirma, é convidado e responde QUERO', async () => {
+  const route = require('../src/app/api/profissional/route.ts');
+  const { notificarFilaCidade } = require('../src/lib/fila.ts');
+  const r = await route.POST(publicRequest('profissional', { nome: 'Pedreiro Fictício', whatsapp: '31987654321',
+    territorySlug: 'belo-horizonte-mg', consent: true, consentVersion: '2026-09-08' }));
+  const command = new URL((await r.json()).verificationUrl).searchParams.get('text');
+  await meta.POST(request(payload('nono-pro', command, 'test-phone', '553187654321')));
+  const pro = await prisma.professional.findUnique({ where: { whatsapp: '31987654321' } });
+  assert.equal(pro.status, 'capturado');
+  await prisma.territory.create({ data: { slug: 'belo-horizonte-mg', nome: 'Belo Horizonte', tipo: 'cidade', uf: 'MG', assinaturaAtiva: true } });
+  await notificarFilaCidade('belo-horizonte-mg');
+  await meta.POST(request(payload('nono-quero', 'QUERO', 'test-phone', '553187654321')));
+  assert.equal((await prisma.professional.findUnique({ where: { id: pro.id } })).status, 'interessado');
+});
+test('evento: teto por origem, nome da base interna e meta restrito', async () => {
+  const route = require('../src/app/api/evento/route.ts');
+  const body = { territorySlug: 'osasco-sp', nomeTerritorio: 'TEXTO DO VISITANTE', uf: 'SP', tipo: 'calculo', servico: 'reboco',
+    meta: { totalMax: 1234, lixo: 'x'.repeat(5000), aninhado: { a: 1 } } };
+  const statuses = [];
+  for (let i = 0; i < 125; i++) statuses.push((await route.POST(publicRequestIp('evento', body, '198.51.100.7'))).status);
+  assert.equal(statuses.filter(s => s === 200).length, 120);
+  assert.equal(statuses.filter(s => s === 429).length, 5);
+  // Outra origem não é afetada pelo teto da primeira.
+  assert.equal((await route.POST(publicRequestIp('evento', body, '198.51.100.8'))).status, 200);
+  const territory = await prisma.territory.findUnique({ where: { slug: 'osasco-sp' } });
+  assert.equal(territory.nome, 'Osasco');
+  assert.equal(territory.calculos, 121);
+  assert.deepEqual((await prisma.territoryEvent.findFirst({ where: { territorySlug: 'osasco-sp' } })).meta, { totalMax: 1234 });
+  assert.equal((await route.POST(publicRequestIp('evento', { ...body, servico: 'servico-inventado' }, '198.51.100.9'))).status, 200);
+  assert.equal(await prisma.territoryEvent.count({ where: { servico: 'servico-inventado' } }), 0);
+});
+test('cadastros: teto por origem mesmo variando o telefone', async () => {
+  const route = require('../src/app/api/lead/route.ts');
+  const statuses = [];
+  for (let i = 0; i < 23; i++) statuses.push((await route.POST(publicRequestIp('lead', leadBody('1198' + String(1000000 + i)), '198.51.100.20'))).status);
+  assert.equal(statuses.filter(s => s === 200).length, 20);
+  assert.equal(statuses.filter(s => s === 429).length, 3);
+  assert.equal(await prisma.lead.count(), 20);
+});
+test('limpeza: pedido nunca confirmado é apagado em 7 dias; confirmado é preservado', async () => {
+  const jobs = require('../src/app/api/internal/jobs/route.ts');
+  const base = { servico: 'reboco', territorySlug: 'sao-paulo-sp', origem: 'calculadora' };
+  await prisma.lead.create({ data: { ...base, id: 'antigo-nao-confirmado', whatsapp: '11911110001', createdAt: new Date(Date.now() - 8 * 86400000) } });
+  await prisma.lead.create({ data: { ...base, id: 'recente-nao-confirmado', whatsapp: '11911110002', createdAt: new Date(Date.now() - 6 * 86400000) } });
+  await prisma.lead.create({ data: { ...base, id: 'antigo-confirmado', whatsapp: '11911110003', createdAt: new Date(Date.now() - 90 * 86400000), verifiedAt: new Date(Date.now() - 90 * 86400000) } });
+  assert.equal((await jobs.POST(jobRequest())).status, 200);
+  assert.deepEqual((await prisma.lead.findMany({ select: { id: true }, orderBy: { id: 'asc' } })).map(l => l.id), ['antigo-confirmado', 'recente-nao-confirmado']);
+});
+test('fila: convite sem resposta expira e a vez passa ao próximo', async () => {
+  const jobs = require('../src/app/api/internal/jobs/route.ts');
+  await prisma.professional.create({ data: { id: 'segundo', nome: 'Segundo Fictício', whatsapp: '11900000002', territorySlug: 'sao-paulo-sp', status: 'capturado', verifiedAt: new Date() } });
+  // Dentro do prazo (47 h): ninguém mais é convidado.
+  await prisma.$executeRawUnsafe(`UPDATE "Professional" SET "updatedAt" = (now() AT TIME ZONE 'UTC') - interval '47 hours' WHERE id = 'test-professional'`);
+  await jobs.POST(jobRequest());
+  assert.equal((await prisma.professional.findUnique({ where: { id: 'segundo' } })).status, 'capturado');
+  // Passado o prazo (49 h): o primeiro expira e o segundo recebe o convite.
+  await prisma.$executeRawUnsafe(`UPDATE "Professional" SET "updatedAt" = (now() AT TIME ZONE 'UTC') - interval '49 hours' WHERE id = 'test-professional'`);
+  await jobs.POST(jobRequest());
+  assert.equal((await prisma.professional.findUnique({ where: { id: billingOptions.professionalId } })).status, 'expirado');
+  assert.equal((await prisma.professional.findUnique({ where: { id: 'segundo' } })).status, 'contatado');
+  assert.equal(await prisma.outboundMessage.count({ where: { kind: 'INVITE', recipient: '11900000002' } }), 1);
+});
+test('fila: quem expirou volta à fila ao se cadastrar de novo e recebe novo convite', async () => {
+  const route = require('../src/app/api/profissional/route.ts');
+  const { notificarFilaCidade } = require('../src/lib/fila.ts');
+  // Convite antigo já enviado a este profissional, com a chave do cadastro anterior.
+  const antigo = await prisma.professional.findUnique({ where: { id: billingOptions.professionalId } });
+  await prisma.outboundMessage.create({ data: { key: `invite:${antigo.id}:${antigo.createdAt.getTime() - 1000}`, recipient: antigo.whatsapp, kind: 'INVITE', payload: {}, state: 'DELIVERED' } });
+  await prisma.professional.update({ where: { id: antigo.id }, data: { status: 'expirado' } });
+  const r = await route.POST(publicRequest('profissional', { nome: 'Teste', whatsapp: billingOptions.whatsapp, territorySlug: 'sao-paulo-sp', consent: true, consentVersion: '2026-09-08' }));
+  const command = new URL((await r.json()).verificationUrl).searchParams.get('text');
+  await meta.POST(request(payload('volta-fila', command)));
+  assert.equal((await prisma.professional.findUnique({ where: { id: antigo.id } })).status, 'capturado');
+  await notificarFilaCidade('sao-paulo-sp');
+  assert.equal((await prisma.professional.findUnique({ where: { id: antigo.id } })).status, 'contatado');
+  assert.equal(await prisma.outboundMessage.count({ where: { kind: 'INVITE' } }), 2);
+});
+test('fila: quem tem cobrança ou vaga reservada não expira pelo prazo do convite', async () => {
+  const jobs = require('../src/app/api/internal/jobs/route.ts');
+  await gerarCobrancaTerritorio(billingOptions);
+  await prisma.professional.update({ where: { id: billingOptions.professionalId }, data: { status: 'interessado' } });
+  await prisma.$executeRawUnsafe(`UPDATE "Professional" SET "updatedAt" = now() - interval '30 days' WHERE id = 'test-professional'`);
+  await jobs.POST(jobRequest());
+  assert.equal((await prisma.professional.findUnique({ where: { id: billingOptions.professionalId } })).status, 'interessado');
+  assert.ok(await prisma.territorySeat.findUnique({ where: { territorySlug: 'sao-paulo-sp' } }));
+});
+test('dúvida com a palavra "não" não tira da fila; recusa isolada tira', async () => {
+  await meta.POST(request(payload('duvida-1', 'Oi, não entendi. Como funciona e quanto custa?')));
+  await meta.POST(request(payload('duvida-2', 'Não sei se vale a pena, pode explicar?')));
+  assert.equal((await prisma.professional.findUnique({ where: { id: billingOptions.professionalId } })).status, 'contatado');
+  // Uma única orientação por hora, sem chamada financeira.
+  assert.equal(await prisma.outboundMessage.count({ where: { key: { startsWith: 'invite-help:' } } }), 1);
+  assert.equal(calls.filter(c => !c.path.endsWith('/messages')).length, 0);
+  await meta.POST(request(payload('recusa', 'Não.')));
+  assert.equal((await prisma.professional.findUnique({ where: { id: billingOptions.professionalId } })).status, 'recusado');
+});
+test('diagnóstico mostra vaga reservada há mais de 5 dias sem fatura registrada', async () => {
+  const ops = require('../src/app/api/internal/operations/route.ts');
+  process.env.INTERNAL_JOB_TOKEN = 'job-token';
+  const read = async () => (await ops.GET(new NextRequest('http://localhost/api/internal/operations', { headers: { authorization: 'Bearer job-token' } }))).json();
+  await gerarCobrancaTerritorio(billingOptions);
+  assert.equal((await read()).billing.length, 0);
+  await prisma.$executeRawUnsafe(`UPDATE "BillingSubscription" SET "createdAt" = now() - interval '6 days'`);
+  const report = await read();
+  assert.equal(report.billing.length, 1);
+  assert.equal(report.attentionRequired, true);
+});
+test('recusa temporária da Meta é repetida com espera; timeout continua em revisão', async () => {
+  const route = require('../src/app/api/lead/route.ts');
+  const { processarOutbox } = require('../src/lib/outbox.ts');
+  const r = await route.POST(publicRequest('lead', leadBody('11987650000')));
+  const command = new URL((await r.json()).verificationUrl).searchParams.get('text');
+  mode = 'message-transient';
+  await meta.POST(request(payload('transient', command, 'test-phone', '5511987650000')));
+  let job = await prisma.outboundMessage.findFirst({ where: { recipient: '5511987650000' } });
+  assert.equal(job.state, 'PENDING');
+  assert.equal(job.attempts, 1);
+  assert.ok(job.nextAttemptAt > new Date());
+  // Antes do horário marcado nada é reenviado.
+  const before = calls.length;
+  await processarOutbox();
+  assert.equal(calls.length, before);
+  // Chegada a hora, com a Meta normalizada, a mensagem sai uma única vez.
+  mode = '';
+  await prisma.$executeRawUnsafe(`UPDATE "OutboundMessage" SET "nextAttemptAt" = now() - interval '1 hour'`);
+  await processarOutbox();
+  job = await prisma.outboundMessage.findUnique({ where: { key: job.key } });
+  assert.equal(job.state, 'SENT');
+  assert.equal(calls.filter(c => c.path.endsWith('/messages')).length, 2);
+});
+test('recusa temporária persistente vai para revisão após a 4ª tentativa', async () => {
+  const { processarOutbox } = require('../src/lib/outbox.ts');
+  await prisma.outboundMessage.create({ data: { key: 'persistente', recipient: '5511900000009', kind: 'TEXT', payload: { text: 'teste' } } });
+  mode = 'message-transient';
+  for (let i = 0; i < 6; i++) {
+    await processarOutbox();
+    await prisma.$executeRawUnsafe(`UPDATE "OutboundMessage" SET "nextAttemptAt" = now() - interval '1 hour'`);
+  }
+  const job = await prisma.outboundMessage.findUnique({ where: { key: 'persistente' } });
+  assert.equal(job.state, 'REVIEW');
+  assert.equal(job.attempts, 4);
 });

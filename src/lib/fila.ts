@@ -2,6 +2,26 @@ import { prisma } from "./db";
 import { getCidade } from "./data/cidades";
 import { cobrancaAutomaticaHabilitada } from "./asaas";
 
+/** Horas que um convite fica aguardando resposta antes de a vez passar ao próximo da fila. */
+export function prazoConviteHoras() {
+  const h = Number(process.env.FILA_CONVITE_HORAS ?? "48");
+  return Number.isFinite(h) && h >= 1 ? h : 48;
+}
+
+/**
+ * Libera a fila quando o convidado não responde. Não mexe em quem já tem cobrança
+ * ou vaga reservada: esses casos seguem o fluxo financeiro. Quem expirou pode se
+ * cadastrar de novo e volta ao fim da fila.
+ */
+export async function expirarConvites() {
+  const limite = new Date(Date.now() - prazoConviteHoras() * 3600000);
+  const expirados = await prisma.professional.updateMany({
+    where: { status: { in: ["contatado", "interessado"] }, updatedAt: { lt: limite }, billing: { is: null } },
+    data: { status: "expirado" },
+  });
+  return expirados.count;
+}
+
 export async function notificarFilaCidade(territorySlug: string) {
   if (!cobrancaAutomaticaHabilitada()) return;
   await prisma.$transaction(async tx => {
@@ -16,8 +36,11 @@ export async function notificarFilaCidade(territorySlug: string) {
     const claimed = await tx.professional.updateMany({ where: { id: professional.id, status: "capturado" }, data: { status: "contatado" } });
     if (!claimed.count) return;
     const label = getCidade(territorySlug);
-    await tx.outboundMessage.upsert({ where: { key: `invite:${professional.id}` }, create: {
-      key: `invite:${professional.id}`, recipient: professional.whatsapp, kind: "INVITE",
+    // createdAt é renovado quando o profissional volta à fila; assim um novo convite
+    // não é confundido com o convite antigo, já enviado.
+    const key = `invite:${professional.id}:${professional.createdAt.getTime()}`;
+    await tx.outboundMessage.upsert({ where: { key }, create: {
+      key, recipient: professional.whatsapp, kind: "INVITE",
       payload: { name: professional.nome.split(" ")[0], city: label ? `${label.nome}/${label.uf}` : territorySlug },
     }, update: {} });
   });
