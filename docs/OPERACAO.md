@@ -51,3 +51,20 @@ Estas evidências não significam que pagamentos, operação comercial, cancelam
 - Outbox consulta o relógio UTC do PostgreSQL para selecionar mensagens vencidas. O 31º teste cobre relógio da aplicação atrasado e preservação de agendamentos futuros.
 - DATABASE_URL, ASAAS_API_KEY e ASAAS_WEBHOOK_TOKEN devem ser exclusivamente runtime no Coolify, assim como os segredos Meta. Build e Prisma generate foram validados sem DATABASE_URL.
 - Imagens e caches antigos podem conter argumentos de build legados. A correção da configuração não apaga cópias históricas; revisar acesso e rotacionar as credenciais afetadas de forma coordenada antes da ativação financeira.
+
+## Atualização da auditoria — 19/11/2026
+
+Correções aplicadas a partir do parecer de auditoria de 19/11/2026. Cada item tem teste em `tests/safety.test.cjs` ou `tests/seo.test.cjs`.
+
+- **Nono dígito.** Telefones são guardados e comparados na forma canônica (DDD + 9 + 8 dígitos). A Meta costuma identificar celulares de fora dos DDDs 11–19, 21, 22, 24, 27 e 28 sem o nono dígito; antes disso a confirmação falhava nesses casos. As respostas continuam indo para o identificador que a Meta enviou.
+- **Fila.** Convite sem resposta expira em 48 h (variável opcional `FILA_CONVITE_HORAS`) e o profissional passa a `expirado`; a vez segue para o próximo. Quem já tem cobrança ou vaga reservada não expira por esse prazo. `expirado` e `recusado` voltam ao fim da fila ao se cadastrar de novo, e recebem um novo convite.
+- **Recusa.** Só a resposta isolada (SAIR, PARAR, NÃO, NÃO QUERO) tira da fila. Outras frases recebem uma orientação por hora.
+- **Outbox.** Recusa temporária declarada pela Meta (HTTP 429 ou 5xx com objeto de erro) é repetida após 1, 5 e 30 minutos; depois disso, `REVIEW`. Timeout, erro de rede e resposta sem identificador continuam indo direto para `REVIEW`, sem repetição.
+- **Limites públicos.** `/api/lead` e `/api/profissional`: 20 por hora por origem, além do limite por telefone. `/api/evento`: 120 por hora por origem e 600 por hora por território. A origem é a última entrada de `X-Forwarded-For` (a que o proxy do Coolify acrescenta) e só entra em uma chave gravada como hash. Se um CDN for colocado na frente do site, essa leitura precisa ser revista.
+- **Evento.** O nome do território vem da base interna e `meta` aceita apenas os campos que o site envia.
+- **Retenção.** Pedido nunca confirmado pelo WhatsApp é apagado em 7 dias pelo worker. O prazo de guarda dos confirmados continua sem definição e depende de decisão do responsável.
+- **Diagnóstico.** `/api/internal/operations` passa a listar vaga reservada há mais de 5 dias sem nenhuma fatura registrada.
+- **Dependências.** Next.js e eslint-config-next 16.4.6; sharp 0.35.5 por override; `npm audit` sem itens conhecidos naquele momento. O otimizador de imagens foi desligado (`images.unoptimized`), porque o site não usa `next/image`.
+- **CI.** `.github/workflows/ci.yml` roda lint, tipos, migrations, testes, build e `npm audit` em todo pull request e em `main`. O Coolify publica a partir de `main`; para o CI valer como trava, alterações devem entrar por pull request.
+
+Não alterado nesta rodada, por depender de decisão do responsável ou de acesso que a aplicação não tem: backup recorrente do banco fora da VPS, alerta automático para itens em revisão, retorno de assinante cancelado à fila, prazo de guarda dos cadastros confirmados e visibilidade do repositório.

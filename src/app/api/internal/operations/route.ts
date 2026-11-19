@@ -15,7 +15,9 @@ export async function GET(req: NextRequest) {
         select: { key: true, kind: true, state: true, attempts: true, updatedAt: true }, take: 50, orderBy: { updatedAt: "asc" } }),
       prisma.billingSubscription.findMany({ where: { OR: [{ state: "REVIEW" }, { state: "CREATING", updatedAt: { lt: stale } },
         { cancellationState: "REVIEW" }, { cancellationState: { in: ["PROCESSING", "SUBMITTED"] }, updatedAt: { lt: stale } },
-        { overdueSince: { not: null } }] },
+        { overdueSince: { not: null } },
+        // Vaga reservada há mais de 5 dias sem nenhuma fatura registrada: conferir no Asaas.
+        { state: "READY", activePaymentId: null, latestPaymentId: null, createdAt: { lt: new Date(Date.now() - 5 * 86400000) } }] },
         select: { professionalId: true, subscriptionId: true, state: true, cancellationState: true, overdueSince: true, updatedAt: true },
         take: 50, orderBy: { updatedAt: "asc" } }),
       prisma.webhookReceipt.findMany({ where: { OR: [{ state: "FAILED" }, { state: "PROCESSING", updatedAt: { lt: stale } }] },

@@ -1,7 +1,8 @@
 import { randomBytes, createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "./db";
-import { CONSENT_VERSION } from "./public-request";
+import { CONSENT_VERSION, canonicoWhatsApp } from "./public-request";
+import { valorAssinatura } from "./asaas";
 import { getOficioAtivo } from "../oficios";
 
 export async function criarVerificacao(kind: string, whatsapp: string, data: Prisma.InputJsonValue) {
@@ -18,7 +19,8 @@ export async function confirmarWhatsApp(sender: string, text: string): Promise<b
   if (!/^confirmar\b/i.test(text.trim())) return false;
   const match = /^confirmar ([a-f0-9]{48})$/i.exec(text.trim());
   const tokenHash = match ? createHash("sha256").update(match[1]).digest("hex") : null;
-  const whatsapp = sender.slice(2);
+  // A Meta pode entregar o remetente sem o nono dígito; o cadastro guarda a forma canônica.
+  const whatsapp = canonicoWhatsApp(sender.slice(2));
   await prisma.$transaction(async tx => {
     const request = tokenHash ? await tx.verificationRequest.findUnique({ where: { tokenHash } }) : null;
     // A repeated, already completed confirmation must not produce another reply.
@@ -51,10 +53,11 @@ export async function confirmarWhatsApp(sender: string, text: string): Promise<b
           verifiedAt: new Date(), consentAt: new Date(), consentVersion: CONSENT_VERSION,
         }, update: {
           nome: data.nome, territorySlug: data.territorySlug, verifiedAt: new Date(), consentAt: new Date(), consentVersion: CONSENT_VERSION,
-          ...(existing?.status === "recusado" ? { status: "capturado", createdAt: new Date() } : {}),
+          ...(existing && ["recusado", "expirado"].includes(existing.status) ? { status: "capturado", createdAt: new Date() } : {}),
           ...(existing && existing.territorySlug !== data.territorySlug ? { createdAt: new Date(), status: "capturado" } : {}),
         } });
-        response = "Cadastro confirmado no PedreirosBR! A entrada na fila é gratuita. A assinatura custa R$ 97/mês e só será oferecida quando houver demanda na cidade e a vaga exclusiva estiver disponível. Não há garantia de quantidade de pedidos ou de contratação.";
+        const valor = valorAssinatura().toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: Number.isInteger(valorAssinatura()) ? 0 : 2 });
+        response = `Cadastro confirmado no PedreirosBR! A entrada na fila é gratuita. A assinatura custa ${valor}/mês e só será oferecida quando houver demanda na cidade e a vaga exclusiva estiver disponível. Não há garantia de quantidade de pedidos ou de contratação.`;
       }
     } else {
       const lead = await tx.lead.findUniqueOrThrow({ where: { id: data.leadId } });

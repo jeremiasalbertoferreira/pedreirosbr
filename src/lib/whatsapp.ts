@@ -19,6 +19,17 @@ export interface ResultadoEnvio {
   ok: boolean;
   motivo?: string;
   messageId?: string;
+  /**
+   * true só quando a própria Meta respondeu que recusou o envio por sobrecarga
+   * ou limite de taxa (429/5xx com objeto de erro). Nesses casos nada foi
+   * entregue e repetir é seguro. Timeout e erro de rede NÃO entram aqui: a
+   * mensagem pode ter sido aceita, então seguem para conciliação manual.
+   */
+  retentavel?: boolean;
+}
+
+function recusaTemporaria(status: number, erro: unknown) {
+  return !!erro && typeof erro === "object" && (status === 429 || status >= 500);
 }
 
 export function whatsappConfigurado(): boolean {
@@ -91,7 +102,7 @@ async function enviarTemplate(
 
     if (!resp.ok) {
       console.error("[whatsapp] falha Meta:", resp.status, data.error?.code);
-      return { ok: false, motivo: `http_${resp.status}` };
+      return { ok: false, motivo: `http_${resp.status}`, retentavel: recusaTemporaria(resp.status, data.error) };
     }
     return { ok: true, messageId: data.messages?.[0]?.id };
   } catch {
@@ -152,7 +163,7 @@ export async function enviarMensagemTexto(zap: string, texto: string): Promise<R
     };
     if (!resp.ok) {
       console.error("[whatsapp] falha texto Meta:", resp.status, data.error?.code);
-      return { ok: false, motivo: `http_${resp.status}` };
+      return { ok: false, motivo: `http_${resp.status}`, retentavel: recusaTemporaria(resp.status, data.error) };
     }
     return { ok: true, messageId: data.messages?.[0]?.id };
   } catch {

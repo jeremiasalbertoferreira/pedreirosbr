@@ -207,7 +207,9 @@ Comportamento do webhook (`src/app/api/whatsapp/webhook/route.ts`):
 
 - Pedreiro responde **"QUERO"** → status vira `interessado` + recebe confirmação
   na hora (mensagem livre dentro da janela de 24h) + evento registrado no organismo
-- Responde **"sair"/"parar"/"não"** → status `recusado`, sai da fila com mensagem educada
+- Responde só **"sair"**, **"parar"**, **"não"** ou **"não quero"** → status `recusado`, sai da fila com mensagem educada
+- Qualquer outra frase (inclusive dúvidas com a palavra "não") → recebe uma orientação curta, no máximo uma por hora, e o cadastro não muda
+- Sem resposta em 48 h (`FILA_CONVITE_HORAS`) → status `expirado` e a vez passa ao próximo da fila
 - Só processa quem está com status `contatado`; o resto é ignorado
 
 **Este webhook é também a base futura para receber respostas dos CLIENTES**
@@ -254,7 +256,7 @@ minha mente da VPS.
 
 ### Status do profissional
 
-`capturado` → `contatado` → `interessado` → `assinante` · `recusado` · `cancelado`
+`capturado` → `contatado` → `interessado` → `assinante` · `recusado` · `expirado` · `cancelado`
 
 ## 8. Teste end-to-end
 

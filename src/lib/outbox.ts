@@ -1,9 +1,16 @@
 import { prisma } from "./db";
 import type { OutboundMessage } from "@prisma/client";
-import { avisosFinanceirosHabilitados, enviarAvisoFinanceiro, enviarMensagemTexto, enviarNovoLead, enviarConviteTerritorio, whatsappConfigurado } from "./whatsapp";
+import { avisosFinanceirosHabilitados, enviarAvisoFinanceiro, enviarMensagemTexto, enviarNovoLead, enviarConviteTerritorio, whatsappConfigurado, type ResultadoEnvio } from "./whatsapp";
 import { getCidade } from "./data/cidades";
 
-/** Sem repetição cega após timeout: SENT tem ID, REVIEW exige conciliação. */
+/** Esperas, em minutos, antes da 2ª, 3ª e 4ª tentativa. Depois disso, REVIEW. */
+const ESPERAS_MIN = [1, 5, 30];
+
+/**
+ * Sem repetição cega após timeout: SENT tem ID, REVIEW exige conciliação.
+ * A única repetição automática é a recusa temporária declarada pela Meta
+ * (ver ResultadoEnvio.retentavel), em que nada chegou a ser entregue.
+ */
 export async function processarOutbox() {
   if (!whatsappConfigurado()) return { processed: 0 };
   // Usar o relógio do banco em UTC (formato do Prisma) evita atrasos por
@@ -48,7 +55,15 @@ export async function processarOutbox() {
       : job.kind === "TEXT" ? await enviarMensagemTexto(job.recipient, payload.text)
       : job.kind === "LEAD" ? await enviarNovoLead(job.recipient, payload.city, payload.summary, payload.phone)
       : job.kind === "INVITE" ? await enviarConviteTerritorio(job.recipient, payload.name, payload.city, 1)
-      : { ok: false, messageId: undefined };
+      : { ok: false, messageId: undefined } as ResultadoEnvio;
+    const espera = !result.ok && result.retentavel ? ESPERAS_MIN[job.attempts] : undefined;
+    if (espera !== undefined) {
+      await prisma.outboundMessage.update({ where: { key: job.key }, data: {
+        state: "PENDING", nextAttemptAt: new Date(Date.now() + espera * 60000),
+      } });
+      processed++;
+      continue;
+    }
     await prisma.outboundMessage.update({ where: { key: job.key }, data: {
       state: result.ok && result.messageId ? "SENT" : "REVIEW", messageId: result.messageId,
     } });

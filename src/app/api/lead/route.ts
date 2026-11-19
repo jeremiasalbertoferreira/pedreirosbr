@@ -3,7 +3,7 @@ import { prisma } from "../../../lib/db";
 import { getCidade } from "../../../lib/data/cidades";
 import { UFS } from "../../../lib/data/ufs";
 import { getOficioAtivo } from "../../../oficios";
-import { corpoPublico, limitar, normalizarWhatsApp, CONSENT_VERSION } from "../../../lib/public-request";
+import { corpoPublico, limitar, limitarPorIp, normalizarWhatsApp, CONSENT_VERSION } from "../../../lib/public-request";
 import { criarVerificacao } from "../../../lib/verification";
 
 export async function POST(req: NextRequest) {
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
         (city && city.uf !== uf.uf) || (body.quoteConsent === true && !city) || body.consentVersion !== CONSENT_VERSION) {
       return NextResponse.json({ ok: false, error: "Confira o telefone e a região. Para pedir orçamento, selecione uma cidade." }, { status: 400 });
     }
-    if (!await limitar(`lead:${whatsapp}`)) return NextResponse.json({ ok: false, error: "Muitas tentativas. Aguarde uma hora." }, { status: 429 });
+    if (!await limitarPorIp(req, "lead", 20) || !await limitar(`lead:${whatsapp}`)) return NextResponse.json({ ok: false, error: "Muitas tentativas. Aguarde uma hora." }, { status: 429 });
     const summary = String(body.resumo ?? service.nome).slice(0, 700);
     const materials = String(body.materials ?? "").slice(0, 2300);
     const lead = await prisma.lead.create({ data: {
