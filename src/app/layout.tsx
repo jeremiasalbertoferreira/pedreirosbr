@@ -115,6 +115,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
               <p className="mt-10 border-t border-ink/10 pt-6 text-xs text-ink-soft">
                 © {new Date().getFullYear()} {oficio.dominio} — feito no Brasil 🇧🇷
+                <span className="mt-1 block">{oficio.nomePlural}BR é uma marca operada por JEAFEX Tecnologia Ltda., CNPJ 64.368.760/0001-39.</span>
               </p>
             </div>
           </footer>
