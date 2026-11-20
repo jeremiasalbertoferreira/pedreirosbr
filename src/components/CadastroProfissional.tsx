@@ -7,6 +7,9 @@ import type { UFData } from "../lib/data/ufs";
 interface Props {
   ufs: UFData[];
   cidades: CidadeData[];
+  /** quando o cadastro aparece dentro de uma página de cidade, já nasce nela */
+  ufInicial?: string;
+  cidadeInicial?: string;
 }
 
 interface Resultado {
@@ -17,12 +20,12 @@ interface Resultado {
  * Fila de pedreiros por cidade (fase 2). Um POST em /api/profissional e pronto —
  * o pedreiro entra na fila do território dele.
  */
-export function CadastroProfissional({ ufs, cidades }: Props) {
+export function CadastroProfissional({ ufs, cidades, ufInicial, cidadeInicial }: Props) {
   const [nome, setNome] = useState("");
   const [zap, setZap] = useState("");
   const [consent, setConsent] = useState(false);
-  const [uf, setUf] = useState("SP");
-  const [cidadeSlug, setCidadeSlug] = useState("");
+  const [uf, setUf] = useState(ufInicial ?? "SP");
+  const [cidadeSlug, setCidadeSlug] = useState(cidadeInicial ?? "");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
   const [resultado, setResultado] = useState<Resultado | null>(null);

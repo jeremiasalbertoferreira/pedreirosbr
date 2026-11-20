@@ -80,6 +80,12 @@ test('city page lets the visitor calculate in place, with the city preselected, 
   assert.equal(html.match(/role="tab"/g).length, 5);
   assert.match(html, /href="\/para-pedreiros"/);
   assert.match(html, /Sem garantia de quantidade de pedidos/);
+  // O cadastro do profissional fica na própria página, já com a cidade escolhida.
+  const cadastro = html.slice(html.indexOf('id="para-profissionais"'));
+  assert.match(cadastro, /aria-label="Cidade onde trabalha"/);
+  assert.match(cadastro, /<option value="osasco-sp" class="text-ink" selected="">Osasco<\/option>/);
+  assert.match(cadastro, /Entrar na fila da minha cidade/);
+  assert.match(cadastro, /Entrar na fila não inicia cobrança/);
 });
 
 test('calculator schema describes the visible tool, not a hidden FAQ', async () => {

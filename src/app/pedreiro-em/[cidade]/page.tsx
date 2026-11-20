@@ -9,6 +9,7 @@ import { brlFmt } from "../../../lib/format";
 import { JsonLd } from "../../../components/JsonLd";
 import { AdSlot } from "../../../components/AdSlot";
 import { CalculadoraCidade } from "../../../components/CalculadoraCidade";
+import { CadastroProfissional } from "../../../components/CadastroProfissional";
 
 const oficio = getOficioAtivo();
 
@@ -132,15 +133,15 @@ export default async function CidadePage({ params }: { params: Promise<{ cidade:
         </div>
       </section>
 
-      <section className="rounded-xl bg-neutral-900 p-6 text-white">
-        <h2 className="text-xl font-bold">É {oficio.nome.toLowerCase()} em {c.nome}?</h2>
-        <p className="mt-1 text-neutral-300">
-          Entre na fila da cidade, de graça. Quando houver pedidos confirmados em {c.nome}, a vaga da cidade é oferecida a um profissional por vez.
-          Sem garantia de quantidade de pedidos.
+      <section id="para-profissionais" className="scroll-mt-24">
+        <h2 className="text-2xl font-extrabold text-neutral-900">É {oficio.nome.toLowerCase()} em {c.nome}?</h2>
+        <p className="mt-1 text-neutral-600">
+          Entre na fila da cidade aqui mesmo, de graça. Quando houver pedidos confirmados em {c.nome}, a vaga da cidade é oferecida a um profissional por vez.
+          Sem garantia de quantidade de pedidos. <Link href="/para-pedreiros" className="font-semibold text-orange-800 underline">Como funciona</Link>.
         </p>
-        <Link href="/para-pedreiros" className="mt-4 inline-block rounded-lg bg-orange-700 px-5 py-3 font-semibold hover:bg-orange-800">
-          Quero entrar na fila
-        </Link>
+        <div className="mt-5">
+          <CadastroProfissional ufs={[uf]} cidades={cidadesDaUF} ufInicial={uf.uf} cidadeInicial={c.slug} />
+        </div>
       </section>
 
       <AdSlot posicao="meio" />

@@ -160,6 +160,11 @@ export function OrcamentoForm({ dominio, ufs, cidades }: Props) {
         <div className="rounded-xl border border-green-300 bg-green-50 p-4 text-green-900">
           <p className="font-semibold">PDF gerado! 📄</p>
           <p className="mt-1 text-sm">Agora é só mandar no WhatsApp do seu cliente. Gere quantos quiser — é grátis, pra sempre.</p>
+          <p className="mt-3 text-sm">
+            Quer receber pedidos de clientes{cidadeNome ? ` de ${cidadeNome}` : " da sua cidade"}?{" "}
+            <a href={cidadeSel ? `/pedreiro-em/${cidadeSel}#para-profissionais` : "/para-pedreiros"} className="font-semibold underline">Entre na fila da cidade, grátis</a>.
+            Sem garantia de quantidade de pedidos.
+          </p>
         </div>
       )}
     </div>
