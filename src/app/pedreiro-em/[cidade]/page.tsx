@@ -3,11 +3,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getOficioAtivo, SITE_URL } from "../../../oficios";
 import { getUF } from "../../../lib/data/ufs";
-import { CIDADES, getCidade, cidadesPorUF } from "../../../lib/data/cidades";
+import { CIDADES, getCidade, cidadesPorUF, type CidadeData } from "../../../lib/data/cidades";
 import { calcReboco, calcMuro, calcPintura } from "../../../lib/calc/engines";
 import { brlFmt } from "../../../lib/format";
 import { JsonLd } from "../../../components/JsonLd";
 import { AdSlot } from "../../../components/AdSlot";
+import { CalculadoraCidade } from "../../../components/CalculadoraCidade";
 
 const oficio = getOficioAtivo();
 
@@ -15,13 +16,30 @@ export function generateStaticParams() {
   return CIDADES.map((c) => ({ cidade: c.slug }));
 }
 
+/** Referências estaduais usadas no título, na descrição e na página, sempre os mesmos números. */
+function referencias(c: CidadeData) {
+  const uf = getUF(c.uf);
+  return {
+    uf,
+    // Preços de referência calculados pelo próprio motor (consistência total)
+    reboco: calcReboco(40, 1, uf),
+    muro: calcMuro(15, 2, 1, uf),
+    pintura: calcPintura(60, 2, 1, uf),
+    diariaMin: Math.round(180 * uf.multiplicadorMaoDeObra),
+    diariaMax: Math.round(280 * uf.multiplicadorMaoDeObra),
+  };
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ cidade: string }> }): Promise<Metadata> {
   const { cidade } = await params;
   const c = getCidade(cidade);
   if (!c) return {};
+  const r = referencias(c);
   return {
-    title: `Pedreiro em ${c.nome} (${c.uf}): estimativas estaduais de custo`,
-    description: `Planeje sua obra em ${c.nome}: estimativas de diária, reboco, muro e pintura com fatores de ${c.uf}. Veja premissas e limites; não é cotação municipal.`,
+    // Quem busca "pedreiro em <cidade>" ou "valor da diária" quer um número: ele vai no título,
+    // já marcado como estimado. `absolute` dispensa o sufixo do site para o valor caber no resultado.
+    title: { absolute: `Pedreiro em ${c.nome} (${c.uf}): diária estimada de R$ ${r.diariaMin} a R$ ${r.diariaMax}` },
+    description: `Valor da diária de pedreiro em ${c.nome}: estimativa de R$ ${r.diariaMin} a R$ ${r.diariaMax}, referência de ${c.uf}. Reboco ≈ ${brlFmt(r.reboco.maoDeObraM2)}/m², muro ≈ ${brlFmt(r.muro.maoDeObraM2)}/m². Calcule sua obra grátis.`,
     alternates: { canonical: `${SITE_URL}/pedreiro-em/${c.slug}` },
   };
 }
@@ -31,14 +49,9 @@ export default async function CidadePage({ params }: { params: Promise<{ cidade:
   const c = getCidade(cidade);
   if (!c) notFound();
 
-  const uf = getUF(c.uf);
-  // Preços de referência calculados pelo próprio motor (consistência total)
-  const reboco = calcReboco(40, 1, uf);
-  const muro = calcMuro(15, 2, 1, uf);
-  const pintura = calcPintura(60, 2, 1, uf);
-  const diariaMin = Math.round(180 * uf.multiplicadorMaoDeObra);
-  const diariaMax = Math.round(280 * uf.multiplicadorMaoDeObra);
-  const vizinhas = cidadesPorUF(c.uf).filter((x) => x.slug !== c.slug).slice(0, 8);
+  const { uf, reboco, muro, pintura, diariaMin, diariaMax } = referencias(c);
+  const cidadesDaUF = cidadesPorUF(c.uf);
+  const vizinhas = cidadesDaUF.filter((x) => x.slug !== c.slug).slice(0, 8);
 
   const tabela = [
     { servico: "Diária de pedreiro", preco: `R$ ${diariaMin} a R$ ${diariaMax}/dia`, slug: null },
@@ -54,7 +67,7 @@ export default async function CidadePage({ params }: { params: Promise<{ cidade:
           {
             "@context": "https://schema.org",
             "@type": "WebPage",
-            name: `Pedreiro em ${c.nome}: estimativas estaduais de custo`,
+            name: `Pedreiro em ${c.nome} (${c.uf}): diária estimada e preço por m²`,
             url: `${SITE_URL}/pedreiro-em/${c.slug}`,
             description: `Estimativas preliminares com fatores de ${uf.nome}, não cotações de ${c.nome}.`,
             publisher: { "@id": `${SITE_URL}/#organizacao` },
@@ -74,6 +87,9 @@ export default async function CidadePage({ params }: { params: Promise<{ cidade:
           <strong>{brlFmt(reboco.maoDeObraM2)}/m²</strong>, muro ≈ <strong>{brlFmt(muro.maoDeObraM2)}/m²</strong> e
           pintura ≈ <strong>{brlFmt(pintura.maoDeObraM2)}/m²</strong> de mão de obra.
         </p>
+        <a href="#calcular" className="mt-4 inline-block rounded-lg bg-orange-700 px-5 py-3 font-semibold text-white hover:bg-orange-800">
+          Calcular minha obra em {c.nome}
+        </a>
         <p className="mt-3 rounded-xl border border-orange-200 bg-orange-50 p-4 text-sm leading-relaxed text-neutral-800">
           Não é uma pesquisa de preços de {c.nome}. Todas as cidades de {uf.nome} usam os mesmos fatores internos.
           O preço contratado pode ser diferente. <Link href="/metodologia" className="font-semibold text-orange-800 underline">Veja a metodologia e as limitações</Link>.
@@ -105,13 +121,25 @@ export default async function CidadePage({ params }: { params: Promise<{ cidade:
         </p>
       </section>
 
-      <section className="rounded-xl bg-neutral-900 p-6 text-white">
-        <h2 className="text-xl font-bold">Precisa de obra em {c.nome}?</h2>
-        <p className="mt-1 text-neutral-300">
-          Simule materiais e mão de obra com a referência de {uf.nome}. Consulte grátis na página ou confirme seu número para receber uma cópia no WhatsApp.
+      <section id="calcular" className="scroll-mt-24">
+        <h2 className="text-2xl font-extrabold text-neutral-900">Calcule sua obra em {c.nome}</h2>
+        <p className="mt-1 text-neutral-600">
+          Escolha o serviço e informe as medidas. O resultado sai na hora, com a referência de {uf.nome}. Se quiser, receba uma cópia
+          no WhatsApp e autorize o contato de um {oficio.nome.toLowerCase()} de {c.nome}, quando houver um cadastrado.
         </p>
-        <Link href="/calculadoras" className="mt-4 inline-block rounded-lg bg-orange-700 px-5 py-3 font-semibold hover:bg-orange-800">
-          Calcular minha obra grátis
+        <div className="mt-5">
+          <CalculadoraCidade servicos={oficio.servicos} uf={uf} cidadesDaUF={cidadesDaUF} cidade={c.slug} />
+        </div>
+      </section>
+
+      <section className="rounded-xl bg-neutral-900 p-6 text-white">
+        <h2 className="text-xl font-bold">É {oficio.nome.toLowerCase()} em {c.nome}?</h2>
+        <p className="mt-1 text-neutral-300">
+          Entre na fila da cidade, de graça. Quando houver pedidos confirmados em {c.nome}, a vaga da cidade é oferecida a um profissional por vez.
+          Sem garantia de quantidade de pedidos.
+        </p>
+        <Link href="/para-pedreiros" className="mt-4 inline-block rounded-lg bg-orange-700 px-5 py-3 font-semibold hover:bg-orange-800">
+          Quero entrar na fila
         </Link>
       </section>
 

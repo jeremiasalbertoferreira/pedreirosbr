@@ -52,6 +52,36 @@ test('city page communicates state estimates and does not publish hidden FAQs or
   }
 });
 
+test('city title and description answer the search with an estimate, still labelled as one', async () => {
+  const page = require('../src/app/pedreiro-em/[cidade]/page.tsx');
+  for (const c of CIDADES) {
+    const meta = await page.generateMetadata({ params: Promise.resolve({ cidade: c.slug }) });
+    const title = meta.title.absolute;
+    assert.ok(title.startsWith(`Pedreiro em ${c.nome} (${c.uf}): diária estimada de R$ `), title);
+    assert.match(meta.description, /^Valor da diária de pedreiro em .+: estimativa de R\$ \d+ a R\$ \d+, referência de [A-Z]{2}\./);
+    assert.ok(meta.description.length <= 170, `${c.slug}: descrição com ${meta.description.length} caracteres`);
+    assert.doesNotMatch(title + meta.description, /garant|melhor preço|mais barato|oficial/i);
+  }
+  // Os números do título são os mesmos da página.
+  const meta = await page.generateMetadata({ params: Promise.resolve({ cidade: 'fortaleza-ce' }) });
+  const html = render(await page.default({ params: Promise.resolve({ cidade: 'fortaleza-ce' }) }));
+  const [, min, max] = meta.title.absolute.match(/R\$ (\d+) a R\$ (\d+)/);
+  assert.ok(html.includes(`R$ ${min} e R$ ${max}`) && html.includes(`R$ ${min} a R$ ${max}/dia`));
+});
+
+test('city page lets the visitor calculate in place, with the city preselected, and invites local professionals', async () => {
+  const page = require('../src/app/pedreiro-em/[cidade]/page.tsx');
+  const html = render(await page.default({ params: Promise.resolve({ cidade: 'osasco-sp' }) }));
+  assert.match(html, /Calcule sua obra em Osasco/);
+  assert.match(html, /href="#calcular"/);
+  // A calculadora já nasce em Osasco e só oferece cidades de São Paulo.
+  assert.match(html, /<option value="osasco-sp" selected="">Osasco<\/option>/);
+  assert.doesNotMatch(html, /<option value="curitiba-pr"/);
+  assert.equal(html.match(/role="tab"/g).length, 5);
+  assert.match(html, /href="\/para-pedreiros"/);
+  assert.match(html, /Sem garantia de quantidade de pedidos/);
+});
+
 test('calculator schema describes the visible tool, not a hidden FAQ', async () => {
   const page = require('../src/app/calculadoras/[slug]/page.tsx');
   for (const slug of ['reboco', 'muro', 'pintura', 'telhado', 'banheiro']) {
