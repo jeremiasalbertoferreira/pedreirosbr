@@ -26,6 +26,10 @@ Modelo confirmado: R$ 97/mês, um profissional por cidade na plataforma. Manter 
 
 Falhas financeiras ambíguas permanecem em `CREATING`/`REVIEW`. Não apague esses registros para tentar novamente. Verifique a assinatura no provedor antes de qualquer ajuste.
 
+## Anúncios de lojas
+
+Módulo desligado por padrão (`ADS_ENABLED`). Funcionamento, variáveis, revisão manual e roteiro para ligar estão em `docs/ANUNCIOS.md`. A cobrança de anúncios tem chave própria (`ADS_BILLING_ENABLED`) e segue a mesma regra das assinaturas: falha ambígua fica em `REVIEW` e não é repetida sozinha.
+
 ## Atendimento e manutenção
 
 - Cancelamento e pedidos de privacidade são atendidos por e-mail. A página não promete exclusão automática. O operador deve conferir titularidade, cancelar no provedor quando aplicável, atualizar registros locais e responder ao solicitante.

@@ -20,7 +20,7 @@ const { UFS } = require('../src/lib/data/ufs.ts');
 
 test('all existing city URLs stay in the sitemap; dates are not fabricated at build time', () => {
   const sitemap = require('../src/app/sitemap.ts').default();
-  assert.equal(sitemap.length, 866 + require('../src/lib/quantidades/index.ts').QUANTIDADES.length);
+  assert.equal(sitemap.length, 867 + require('../src/lib/quantidades/index.ts').QUANTIDADES.length);
   assert.equal(new Set(sitemap.map(x => x.url)).size, sitemap.length);
   for (const c of CIDADES) assert.ok(sitemap.some(x => x.url === `${SITE_URL}/pedreiro-em/${c.slug}`));
   for (const path of ['metodologia', 'contato', 'termos', 'politica-de-privacidade', 'exclusao-de-dados']) {

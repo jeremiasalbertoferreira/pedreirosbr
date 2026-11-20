@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "../../../../lib/db";
 import { lerCorpoLimitado, segredoIgual } from "../../../../lib/webhook-security";
 import { getCidade } from "../../../../lib/data/cidades";
+import { aplicarEventoDeAnuncio } from "../../../../lib/anuncios";
 
 export const runtime = "nodejs";
 const supported = new Set(["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED", "PAYMENT_OVERDUE", "PAYMENT_DELETED", "PAYMENT_REFUNDED", "SUBSCRIPTION_DELETED"]);
@@ -51,6 +52,8 @@ export async function POST(req: NextRequest) {
         const resumed = await tx.webhookReceipt.updateMany({ where: { provider: "asaas", eventId: body.id, state: "FAILED" }, data: { state: "DONE" } });
         if (!resumed.count) return;
       }
+      // Assinatura de anúncio: identificada pelo registro gravado antes da chamada ao Asaas.
+      if (await aplicarEventoDeAnuncio(tx, subscriptionId, body, object)) return;
       // Serializar eventos concorrentes de uma mesma assinatura.
       await tx.$queryRaw`SELECT "professionalId" FROM "BillingSubscription" WHERE "subscriptionId" = ${subscriptionId} FOR UPDATE`;
       const billing = await tx.billingSubscription.findUnique({ where: { subscriptionId } });

@@ -8,6 +8,7 @@ import { calcReboco, calcMuro, calcPintura } from "../../../lib/calc/engines";
 import { brlFmt } from "../../../lib/format";
 import { JsonLd } from "../../../components/JsonLd";
 import { AdSlot } from "../../../components/AdSlot";
+import { AdBox } from "../../../components/AdBox";
 import { CalculadoraCidade } from "../../../components/CalculadoraCidade";
 import { CadastroProfissional } from "../../../components/CadastroProfissional";
 
@@ -132,6 +133,8 @@ export default async function CidadePage({ params }: { params: Promise<{ cidade:
           <CalculadoraCidade servicos={oficio.servicos} uf={uf} cidadesDaUF={cidadesDaUF} cidade={c.slug} />
         </div>
       </section>
+
+      <AdBox territorio={c.slug} />
 
       <section id="para-profissionais" className="scroll-mt-24">
         <h2 className="text-2xl font-extrabold text-neutral-900">É {oficio.nome.toLowerCase()} em {c.nome}?</h2>

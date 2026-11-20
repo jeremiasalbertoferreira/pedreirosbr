@@ -174,3 +174,79 @@ model WebhookReceipt {
   @@id([provider, eventId])
   @@index([state, updatedAt])
 }
+
+/// Anunciante: loja, distribuidor ou fabricante. Nunca prestador de serviço.
+model Advertiser {
+  id              String       @id @default(cuid())
+  cnpj            String       @unique // 14 dígitos
+  nome            String
+  email           String
+  emailVerifiedAt DateTime?
+  customerId      String? // cliente no Asaas
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  campaigns       AdCampaign[]
+}
+
+/// Um anúncio em uma abrangência (cidade, estado ou Brasil), com plano mensal fixo.
+model AdCampaign {
+  id               String     @id @default(cuid())
+  advertiserId     String
+  advertiser       Advertiser @relation(fields: [advertiserId], references: [id], onDelete: Cascade)
+  categoria        String
+  titulo           String
+  texto            String
+  destino          String // https://… ou https://wa.me/…
+  escopo           String // "cidade" | "estado" | "brasil"
+  territorySlug    String? // só para cidade
+  uf               String? // cidade e estado
+  valorMensal      Int // em centavos, fixado no cadastro
+  status           String     @default("PENDING_EMAIL")
+  confirmToken     String?    @unique
+  confirmExpiresAt DateTime?
+  accessToken      String     @unique // painel privado do anunciante
+  triageDecision   String? // approve | reject | review
+  triageReason     String?
+  triageSource     String? // regras | ia | manual
+  triagedAt        DateTime?
+  // Cobrança: registrada antes de qualquer chamada ao Asaas, sem repetição cega.
+  environment      String?
+  subscriptionId   String?    @unique
+  billingState     String? // CREATING | AWAITING_PAYMENT | PAID | OVERDUE | REVIEW | CANCELLING | CANCEL_SUBMITTED | CANCELLED
+  activePaymentId  String?
+  lastEventCreated String?
+  termsVersion     String
+  consentAt        DateTime
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  stats            AdStatDaily[]
+
+  @@index([status, escopo, territorySlug])
+  @@index([status, escopo, uf])
+}
+
+/// Exibições e cliques por anúncio e por dia (UTC).
+model AdStatDaily {
+  campaignId  String
+  campaign    AdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  day         String // AAAA-MM-DD
+  impressions Int        @default(0)
+  clicks      Int        @default(0)
+
+  @@id([campaignId, day])
+}
+
+/// Fila de e-mails. A chave única impede envio em dobro.
+model EmailOutbox {
+  key           String   @id
+  recipient     String
+  subject       String
+  body          String
+  state         String   @default("PENDING") // PENDING | SENDING | SENT | REVIEW
+  attempts      Int      @default(0)
+  nextAttemptAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([state, nextAttemptAt])
+}

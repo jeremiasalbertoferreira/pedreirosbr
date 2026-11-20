@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   }
   try {
     const stale = new Date(Date.now() - 15 * 60000);
-    const [outbox, billing, receipts] = await Promise.all([
+    const [outbox, billing, receipts, anuncios, emails] = await Promise.all([
       prisma.outboundMessage.findMany({ where: { OR: [{ state: "REVIEW" }, { state: "SENDING", updatedAt: { lt: stale } }] },
         select: { key: true, kind: true, state: true, attempts: true, updatedAt: true }, take: 50, orderBy: { updatedAt: "asc" } }),
       prisma.billingSubscription.findMany({ where: { OR: [{ state: "REVIEW" }, { state: "CREATING", updatedAt: { lt: stale } },
@@ -22,13 +22,23 @@ export async function GET(req: NextRequest) {
         take: 50, orderBy: { updatedAt: "asc" } }),
       prisma.webhookReceipt.findMany({ where: { OR: [{ state: "FAILED" }, { state: "PROCESSING", updatedAt: { lt: stale } }] },
         select: { provider: true, eventId: true, state: true, updatedAt: true }, take: 50, orderBy: { updatedAt: "asc" } }),
+      // Anúncios aguardando decisão humana, ou com cobrança ou cancelamento em conferência. Texto de anúncio não é dado pessoal.
+      prisma.adCampaign.findMany({ where: { OR: [{ status: "PENDING_REVIEW", triagedAt: { not: null } }, { billingState: "REVIEW" },
+        { billingState: { in: ["CREATING", "CANCELLING"] }, updatedAt: { lt: stale } }] },
+        select: { id: true, status: true, billingState: true, categoria: true, titulo: true, texto: true, destino: true, triageReason: true, updatedAt: true },
+        take: 50, orderBy: { updatedAt: "asc" } }),
+      prisma.emailOutbox.findMany({ where: { OR: [{ state: "REVIEW" }, { state: "SENDING", updatedAt: { lt: stale } }] },
+        select: { key: true, state: true, attempts: true, updatedAt: true }, take: 50, orderBy: { updatedAt: "asc" } }),
     ]);
-    return NextResponse.json({ ok: true, attentionRequired: !!(outbox.length || billing.length || receipts.length),
-      limitPerSection: 50, mayHaveMore: [outbox, billing, receipts].some(rows => rows.length === 50), outbox, billing, receipts,
+    return NextResponse.json({ ok: true, attentionRequired: !!(outbox.length || billing.length || receipts.length || anuncios.length || emails.length),
+      limitPerSection: 50, mayHaveMore: [outbox, billing, receipts, anuncios, emails].some(rows => rows.length === 50), outbox, billing, receipts, anuncios, emails,
       safeguards: { billingEnabled: process.env.ASAAS_BILLING_ENABLED === "true",
         financialMessagesEnabled: process.env.WHATSAPP_BILLING_TEMPLATES_ENABLED === "true",
         overduePolicyConfigured: process.env.ASAAS_OVERDUE_POLICY === "pause_cancel_after_7_days",
-        overdueAutoCancelEnabled: process.env.ASAAS_OVERDUE_AUTOCANCEL_ENABLED === "true" },
+        overdueAutoCancelEnabled: process.env.ASAAS_OVERDUE_AUTOCANCEL_ENABLED === "true",
+        adsEnabled: process.env.ADS_ENABLED === "true", adsBillingEnabled: process.env.ADS_BILLING_ENABLED === "true",
+        emailConfigured: !!process.env.SMTP_HOST && !!process.env.EMAIL_FROM,
+        adsTriageByAI: !!process.env.OPENAI_API_KEY && !!process.env.ADS_TRIAGE_MODEL },
     }, { headers });
   } catch { return NextResponse.json({ ok: false }, { status: 503, headers }); }
 }

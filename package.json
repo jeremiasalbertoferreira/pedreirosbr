@@ -9,18 +9,21 @@
     "lint": "eslint",
     "test:safety": "node --test tests/safety.test.cjs",
     "test:seo": "node --test tests/seo.test.cjs",
-    "test:quantidades": "node --test tests/quantidades.test.cjs"
+    "test:quantidades": "node --test tests/quantidades.test.cjs",
+    "test:anuncios": "node --test tests/anuncios.test.cjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "jspdf": "^4.2.1",
     "next": "16.4.6",
+    "nodemailer": "^10.6.1",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

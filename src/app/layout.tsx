@@ -107,6 +107,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <ul className="mt-3 space-y-2 text-ink-soft">
                     <li><Link href="/metodologia">Como calculamos as estimativas</Link></li>
                     <li><Link href="/para-pedreiros">Cadastro de profissionais</Link></li>
+                    <li><Link href="/anuncie">Anuncie sua loja</Link></li>
                     <li><Link href="/politica-de-privacidade">Privacidade</Link></li>
                     <li><Link href="/termos">Termos de uso</Link></li>
                     <li><Link href="/contato">Contato e cancelamento</Link></li>
