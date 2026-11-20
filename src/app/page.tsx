@@ -6,6 +6,7 @@ import { UFS } from "../lib/data/ufs";
 import { Calculadora } from "../components/Calculadora";
 import { JsonLd } from "../components/JsonLd";
 import { AdSlot } from "../components/AdSlot";
+import { QUANTIDADES } from "../lib/quantidades";
 
 const oficio = getOficioAtivo();
 export const metadata: Metadata = { alternates: { canonical: SITE_URL } };
@@ -129,6 +130,15 @@ export default function Home() {
             </p>
             <p className="mt-3 text-sm font-semibold text-accent">Gerar orçamento →</p>
           </Link>
+        </div>
+        <h3 className="mt-10 font-display text-xl font-bold text-ink">Quanto de material comprar</h3>
+        <p className="mt-1 text-ink-soft">Contas de quantidade, sem preço e sem cadastro.</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {QUANTIDADES.map((q) => (
+            <Link key={q.slug} href={`/calculadoras/${q.slug}`} className="rounded-full border border-ink/15 bg-white px-4 py-2 text-sm font-medium text-ink transition hover:border-accent hover:text-accent-dark">
+              {q.nome}
+            </Link>
+          ))}
         </div>
       </section>
 

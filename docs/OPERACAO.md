@@ -68,3 +68,15 @@ Correções aplicadas a partir do parecer de auditoria de 19/11/2026. Cada item 
 - **CI.** `.github/workflows/ci.yml` roda lint, tipos, migrations, testes, build e `npm audit` em todo pull request e em `main`. O Coolify publica a partir de `main`; para o CI valer como trava, alterações devem entrar por pull request.
 
 Não alterado nesta rodada, por depender de decisão do responsável ou de acesso que a aplicação não tem: backup recorrente do banco fora da VPS, alerta automático para itens em revisão, retorno de assinante cancelado à fila, prazo de guarda dos cadastros confirmados e visibilidade do repositório.
+
+## Calculadoras de quantidade — lote 1 (19/11/2026)
+
+Doze calculadoras em `/calculadoras/<slug>`, definidas em `src/lib/quantidades/index.ts`: tijolos e blocos, concreto, pisos e azulejos, telhas, inclinação de telhado, escada, metros quadrados, drywall, areia/brita/terra, contrapiso, forro de PVC e cerca.
+
+- São contas geométricas, sem preço, sem fator por estado, sem rede e sem coleta de telefone.
+- Todo número que depende de produto (telhas por m², consumo de cimento, densidade do rejunte, tamanho de rolo) é campo editável com um valor usual de partida. Nenhum é apresentado como norma.
+- Cada página publica a fórmula, um exemplo calculado no servidor e o que a conta não considera.
+- O botão "Enviar lista pelo WhatsApp" abre o WhatsApp do próprio visitante, sem número de destino, com a lista e o endereço da calculadora.
+- Para criar outra: acrescentar um item em `QUANTIDADES` e um teste com valor conferido à mão em `tests/quantidades.test.cjs`. Página, sitemap, listagens e `llms.txt` saem do registro.
+
+No mesmo lote, o pedido por WhatsApp das calculadoras de preço passou a oferecer a escolha da cidade para quem calculou só com a referência do estado. A cidade continua opcional, porque a base tem 851 municípios.

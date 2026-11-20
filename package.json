@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test:safety": "node --test tests/safety.test.cjs",
-    "test:seo": "node --test tests/seo.test.cjs"
+    "test:seo": "node --test tests/seo.test.cjs",
+    "test:quantidades": "node --test tests/quantidades.test.cjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

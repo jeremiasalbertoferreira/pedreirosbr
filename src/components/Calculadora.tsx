@@ -174,6 +174,7 @@ export function Calculadora({ servico, ufs, cidades, ufInicial, cidadeInicial }:
           <WhatsappCapture
             servico={servico}
             territorio={territorio}
+            cidadesDaUF={cidadesDaUF}
             resumo={`${servico.nome} em ${territorio.nome}: ${brlFmt(resultado.totalMin)}–${brlFmt(resultado.totalMax)} (${resultado.areaEfetiva.toFixed(0)} m²)`}
             resultadoSnapshot={{ totalMin: resultado.totalMin, totalMax: resultado.totalMax, area: resultado.areaEfetiva, materials: resultado.materiais.map(m => `${m.nome}: ${m.quantidade} ${m.unidade} — ${brlFmt(m.custoTotal)}`).join("\n") }}
           />

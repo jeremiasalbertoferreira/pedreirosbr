@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { getOficioAtivo, SITE_URL } from "../oficios";
 import { CIDADES } from "../lib/data/cidades";
+import { QUANTIDADES } from "../lib/quantidades";
 
 /** URLs públicas canônicas. Sem lastModified artificial a cada build. */
 export default function sitemap(): MetadataRoute.Sitemap {
@@ -19,7 +20,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/exclusao-de-dados`, priority: 0.3 },
   ];
 
-  const calculadoras: MetadataRoute.Sitemap = oficio.servicos.map((s) => ({
+  const calculadoras: MetadataRoute.Sitemap = [...oficio.servicos, ...QUANTIDADES].map((s) => ({
     url: `${SITE_URL}/calculadoras/${s.slug}`,
     changeFrequency: "weekly",
     priority: 0.8,
