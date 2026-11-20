@@ -80,3 +80,27 @@ Doze calculadoras em `/calculadoras/<slug>`, definidas em `src/lib/quantidades/i
 - Para criar outra: acrescentar um item em `QUANTIDADES` e um teste com valor conferido à mão em `tests/quantidades.test.cjs`. Página, sitemap, listagens e `llms.txt` saem do registro.
 
 No mesmo lote, o pedido por WhatsApp das calculadoras de preço passou a oferecer a escolha da cidade para quem calculou só com a referência do estado. A cidade continua opcional, porque a base tem 851 municípios.
+
+## Páginas de cidade: título, descrição e calculadora no lugar (19/11/2026)
+
+Motivo, pelos dados do Search Console (propriedade `https://pedreirosbr.com.br/`, ativa desde julho):
+
+| Linha de base | Últimos 28 dias até 17/11/2026 | 28 dias anteriores |
+|---|---|---|
+| Cliques | 481 | 298 |
+| Impressões | 39,1 mil | 23,1 mil |
+| CTR | 1,2% | 1,3% |
+| Posição média | 5,6 | 5,7 |
+
+- Quase todo o tráfego entra pelas páginas `/pedreiro-em/<cidade>`; 860 páginas indexadas, sem ação manual.
+- As buscas visíveis são de dois tipos: contratar ("pedreiro fortaleza", "pedreiros perto de mim") e preço ("valor da diária de um pedreiro em curitiba"). Nas de preço o site aparecia entre a 4ª e a 8ª posição com CTR perto de 0,5%.
+
+O que mudou:
+
+- Título: `Pedreiro em <cidade> (<UF>): diária estimada de R$ X a R$ Y`, sem o sufixo do site. O começo do título foi mantido.
+- Descrição: começa por "Valor da diária de pedreiro em <cidade>: estimativa de R$ X a R$ Y, referência de <UF>".
+- Os números são os mesmos da página e seguem marcados como estimativa estadual. Os avisos da página não mudaram.
+- A calculadora passou a ficar dentro da página de cidade, com a cidade já escolhida, o que torna o pedido por WhatsApp encaminhável sem passo extra.
+- Bloco para o profissional da cidade entrar na fila.
+
+Como medir: comparar CTR e cliques das páginas de cidade no Search Console três a quatro semanas depois da publicação, contra a linha de base acima. Se a posição média piorar de forma clara, o título anterior está no histórico do Git.
