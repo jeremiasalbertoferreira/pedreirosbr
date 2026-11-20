@@ -7,6 +7,7 @@ import { CIDADES } from "../../../lib/data/cidades";
 import { Calculadora } from "../../../components/Calculadora";
 import { JsonLd } from "../../../components/JsonLd";
 import { AdSlot } from "../../../components/AdSlot";
+import { AdBox } from "../../../components/AdBox";
 import { CalculadoraQuantidade } from "../../../components/CalculadoraQuantidade";
 import { QUANTIDADES, getQuantidade, padroes, type CalcQuantidade } from "../../../lib/quantidades";
 
@@ -63,6 +64,8 @@ export default async function CalculadoraPage({ params }: { params: Promise<{ sl
       </div>
 
       <Calculadora servico={servico} ufs={UFS} cidades={CIDADES} />
+
+      <AdBox />
 
       <AdSlot posicao="meio" />
 
@@ -121,6 +124,8 @@ function PaginaQuantidade({ calc }: { calc: CalcQuantidade }) {
       </div>
 
       <CalculadoraQuantidade slug={calc.slug} siteUrl={SITE_URL} />
+
+      <AdBox />
 
       <AdSlot posicao="meio" />
 

@@ -7,6 +7,13 @@ const inputCls =
   "mt-1.5 w-full rounded-xl border border-ink/15 bg-paper px-4 py-2.5 text-ink outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20";
 const labelCls = "block text-sm font-semibold text-ink";
 
+/** Termo de busca nas lojas com link de afiliado. Calculadora sem material definido não mostra links. */
+const BUSCA: Record<string, string> = {
+  "tijolos-e-blocos": "tijolo", concreto: "cimento", "pisos-e-azulejos": "piso porcelanato", telhas: "telha",
+  drywall: "chapa drywall", contrapiso: "argamassa", "forro-pvc": "forro pvc", cerca: "tela para cerca",
+};
+interface Afiliado { nome: string; url: string }
+
 /**
  * Calculadora de quantidade: roda inteira no navegador, sem rede e sem cadastro.
  * Recebe só o slug porque a função de cálculo não atravessa a fronteira servidor → cliente.
@@ -16,6 +23,8 @@ export function CalculadoraQuantidade({ slug, siteUrl }: { slug: string; siteUrl
   const [valores, setValores] = useState<ValoresQ>(() => padroes(calc));
   const [resultado, setResultado] = useState<ResultadoQ | null>(null);
   const [erro, setErro] = useState("");
+  const [lojas, setLojas] = useState<Afiliado[] | null>(null);
+  const busca = BUSCA[slug];
   const visiveis = useMemo(() => calc.campos.filter((c) => campoVisivel(c, valores)), [calc, valores]);
 
   function mudar(id: string, valor: number | string) {
@@ -28,6 +37,12 @@ export function CalculadoraQuantidade({ slug, siteUrl }: { slug: string; siteUrl
     if (problema) { setErro(problema); setResultado(null); return; }
     setErro("");
     setResultado(calc.calcular(valores));
+    // As lojas com link de afiliado só são pedidas depois do primeiro cálculo, e uma vez só.
+    if (busca && lojas === null) {
+      setLojas([]);
+      fetch("/api/anuncio/afiliados").then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (Array.isArray(d?.afiliados)) setLojas(d.afiliados); }).catch(() => {});
+    }
   }
 
   // A lista sai do WhatsApp da própria pessoa, para quem ela escolher (loja ou pedreiro).
@@ -93,6 +108,25 @@ export function CalculadoraQuantidade({ slug, siteUrl }: { slug: string; siteUrl
             </a>
             <p className="mt-3 text-xs text-paper/80">Abre o seu WhatsApp para você escolher a loja ou o profissional. Não coletamos seu número nesta página.</p>
           </div>
+          {busca && lojas && lojas.length > 0 && (
+            <div className="mt-5 rounded-2xl bg-white p-5">
+              <p className="font-semibold text-ink">Ver preços de {busca} em lojas online</p>
+              <ul className="mt-3 flex flex-wrap gap-2">
+                {lojas.map((l) => (
+                  <li key={l.nome}>
+                    <a
+                      href={l.url.replace("{q}", encodeURIComponent(busca))}
+                      target="_blank" rel="sponsored nofollow noopener"
+                      className="inline-block rounded-lg border border-ink/15 px-4 py-2 text-sm font-semibold text-ink hover:border-accent hover:text-accent-dark"
+                    >
+                      {l.nome}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-xs text-ink-soft">Links de afiliado: se você comprar por eles, o PedreirosBR pode receber uma comissão, sem custo extra para você.</p>
+            </div>
+          )}
           <p className="mt-4 text-sm leading-relaxed text-ink-soft">
             Conta de quantidade, não orçamento. Confira as medidas no local e as especificações do produto antes de comprar.
           </p>

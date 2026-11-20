@@ -13,6 +13,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     { url: `${SITE_URL}/orcamento`, priority: 0.9 },
     { url: `${SITE_URL}/quanto-cobrar`, priority: 0.8 },
     { url: `${SITE_URL}/para-pedreiros`, priority: 0.8 },
+    { url: `${SITE_URL}/anuncie`, priority: 0.6 },
     { url: `${SITE_URL}/metodologia`, lastModified: "2026-09-09", priority: 0.7 },
     { url: `${SITE_URL}/contato`, priority: 0.5 },
     { url: `${SITE_URL}/termos`, priority: 0.3 },

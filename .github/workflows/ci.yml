@@ -57,6 +57,8 @@ jobs:
         run: npm run test:seo
       - name: Testes das calculadoras de quantidade
         run: npm run test:quantidades
+      - name: Testes dos anúncios
+        run: npm run test:anuncios
       - name: Build de produção
         run: npm run build
       - name: Dependências sem falha alta ou crítica

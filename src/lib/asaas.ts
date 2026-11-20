@@ -14,7 +14,7 @@ export function valorAssinatura(): number {
   return Number.isFinite(v) && v > 0 ? v : 97;
 }
 
-async function asaasFetch<T>(path: string, init: RequestInit): Promise<T> {
+export async function asaasFetch<T>(path: string, init: RequestInit): Promise<T> {
   if (!asaasConfigurado()) throw new Error("asaas_nao_configurado");
   const base = process.env.ASAAS_ENV === "sandbox" ? "https://api-sandbox.asaas.com/v3" : "https://api.asaas.com/v3";
   const resp = await fetch(`${base}${path}`, {
