@@ -1,5 +1,6 @@
 import { getOficioAtivo, SITE_URL } from "../../oficios";
 import { CIDADES } from "../../lib/data/cidades";
+import { QUANTIDADES } from "../../lib/quantidades";
 
 /**
  * Resumo público da plataforma; não garante indexação ou citação em buscadores.
@@ -8,6 +9,9 @@ export function GET() {
   const oficio = getOficioAtivo();
   const calculadoras = oficio.servicos
     .map((s) => `- [Calculadora de ${s.nome}](${SITE_URL}/calculadoras/${s.slug}): ${s.perguntaCliente}`)
+    .join("\n");
+  const quantidades = QUANTIDADES
+    .map((q) => `- [${q.titulo}](${SITE_URL}/calculadoras/${q.slug}): ${q.descricao}`)
     .join("\n");
   const cidades = CIDADES.slice(0, 30)
     .map((c) => `- [${oficio.nome} em ${c.nome} (${c.uf})](${SITE_URL}/pedreiro-em/${c.slug})`)
@@ -28,6 +32,12 @@ export function GET() {
 ${calculadoras}
 - [Gerador de orçamento em PDF](${SITE_URL}/orcamento): orçamento profissional grátis para ${oficio.nomePlural.toLowerCase()}
 - [Quanto cobrar em 2026](${SITE_URL}/quanto-cobrar): guia de preços para o profissional
+
+## Calculadoras de quantidade
+
+Contas geométricas, sem preço e sem fator por estado. Cada página mostra a fórmula e o que a conta não considera.
+
+${quantidades}
 
 ## Páginas de cidade com referências estaduais
 

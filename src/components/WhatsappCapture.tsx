@@ -6,6 +6,8 @@ import type { ServicoCalc } from "../oficios/types";
 interface Props {
   servico: ServicoCalc;
   territorio: { slug: string; nome: string; uf: string };
+  /** cidades do estado escolhido, para quem calculou só com a referência estadual */
+  cidadesDaUF?: { slug: string; nome: string }[];
   resumo: string;
   resultadoSnapshot: Record<string, unknown>;
 }
@@ -14,7 +16,13 @@ interface Props {
  * Captura do lead: 1 campo (WhatsApp) + opcional "quero orçamentos reais".
  * Sem cadastro, sem senha — a conversão mora no WhatsApp.
  */
-export function WhatsappCapture({ servico, territorio, resumo, resultadoSnapshot }: Props) {
+export function WhatsappCapture({ servico, territorio: territorioDoCalculo, cidadesDaUF = [], resumo: resumoDoCalculo, resultadoSnapshot }: Props) {
+  // Quem calculou sem cidade pode informá-la aqui: sem ela o pedido não tem a quem ser encaminhado.
+  const semCidade = territorioDoCalculo.slug.startsWith("uf-");
+  const [cidadeAqui, setCidadeAqui] = useState("");
+  const escolhida = cidadesDaUF.find((c) => c.slug === cidadeAqui);
+  const territorio = semCidade && escolhida ? { slug: escolhida.slug, nome: escolhida.nome, uf: territorioDoCalculo.uf } : territorioDoCalculo;
+  const resumo = semCidade && escolhida ? resumoDoCalculo.replace(territorioDoCalculo.nome, escolhida.nome) : resumoDoCalculo;
   const [zap, setZap] = useState("");
   const [querOrcamentos, setQuerOrcamentos] = useState(false);
   const [enviado, setEnviado] = useState(false);
@@ -95,6 +103,20 @@ export function WhatsappCapture({ servico, territorio, resumo, resultadoSnapshot
           {enviando ? "Enviando…" : "Receber no WhatsApp"}
         </button>
       </div>
+      {semCidade && cidadesDaUF.length > 0 && (
+        <label className="mt-4 block text-sm font-semibold">Sua cidade
+          <select
+            aria-label="Cidade da obra"
+            className="mt-2 w-full rounded-xl border border-paper/40 bg-ink px-4 py-3 text-paper"
+            value={cidadeAqui}
+            onChange={(e) => { setCidadeAqui(e.target.value); if (!e.target.value) setQuerOrcamentos(false); }}
+          >
+            <option value="">Minha cidade não está na lista</option>
+            {cidadesDaUF.map((c) => <option key={c.slug} value={c.slug}>{c.nome}</option>)}
+          </select>
+          <span className="mt-2 block text-xs font-normal text-paper/80">O cálculo não muda. A cidade serve para encaminhar o pedido ao profissional de lá, quando houver, se você autorizar abaixo.</span>
+        </label>
+      )}
       <label className="mt-4 flex cursor-pointer items-start gap-3 py-2 text-sm text-paper/90">
         <input
           type="checkbox"
@@ -108,7 +130,7 @@ export function WhatsappCapture({ servico, territorio, resumo, resultadoSnapshot
           <span className="block text-xs text-paper/80">({resumo})</span>
         </span>
       </label>
-      {territorio.slug.startsWith("uf-") && <p className="mt-2 text-xs text-paper/80">Selecione uma cidade na calculadora para solicitar contato do profissional, quando disponível.</p>}
+      {territorio.slug.startsWith("uf-") && <p className="mt-2 text-xs text-paper/80">Escolha sua cidade acima para poder solicitar contato do profissional, quando disponível.</p>}
       <p className="mt-3 text-xs text-paper/80">Ao confirmar no WhatsApp, você solicita esta simulação. Compartilhamos seu telefone com o profissional da cidade somente se marcar a opção acima. <a className="underline" href="/politica-de-privacidade">Privacidade</a>.</p>
       {erro && <p role="alert" className="mt-3 text-sm text-red-300">{erro}</p>}
     </div>
