@@ -104,3 +104,33 @@ O que mudou:
 - Bloco para o profissional da cidade entrar na fila.
 
 Como medir: comparar CTR e cliques das páginas de cidade no Search Console três a quatro semanas depois da publicação, contra a linha de base acima. Se a posição média piorar de forma clara, o título anterior está no histórico do Git.
+
+
+## Backup externo e restauração — 20/11/2026
+
+Registro da operação solicitada pelo responsável: backup fora do servidor, retenção e teste em banco temporário. Esta atualização é somente documentação.
+
+- Destino: bucket privado R2 `forja-backups`, configurado e validado no Coolify para o backup do PedreirosBR.
+- Agendamento: diário às 06:00 UTC, equivalente a 03:00 de Brasília.
+- Retenção aprovada: **14 dias no servidor e 90 dias no R2**, mantendo a cópia local. Não foi aplicada expiração geral ao bucket compartilhado.
+- Execução conferida: **20/11/2026, 21:41:36–21:41:44 de Brasília**, com sucesso e cópias local e externa disponíveis. Arquivo de 43.003 bytes.
+- Recuperação conferida: **21:42:25–21:42:31 de Brasília**. A cópia foi baixada diretamente do R2 pelo cliente nativo do Coolify. Tamanho e SHA-256 coincidiram com a cópia local.
+- Restauração em PostgreSQL 16.14 temporário: código de saída 0; **13 tabelas comparadas, 13 contagens iguais à produção e nenhuma divergência**.
+- O teste usou um container sem rede, sem portas públicas e sem volumes de produção. O ambiente temporário e as cópias de trabalho foram removidos ao final. Na produção foram consultadas apenas identidade e contagens em transações de leitura; não houve reinício do banco.
+- Uma comparação anterior usou um backup de várias horas antes e encontrou diferença de uma linha em duas tabelas. Foi gerado o backup atual acima e repetida a comparação imediatamente, com igualdade nas 13 tabelas.
+
+O teste comprovou restauração e contagens; não homologou permissões de usuários, mensagens WhatsApp ou cobranças. Nenhum segredo ou conteúdo de cadastro faz parte deste registro.
+
+### Procedimento de restauração
+
+1. No Coolify, abra o banco do **PedreirosBR → Backups → Executions**. Escolha uma execução com sucesso, banco correto e cópia R2 disponível. Confira horário e tamanho.
+2. Obtenha a cópia pelo destino autenticado e mantenha o arquivo em diretório privado. Não coloque credenciais em comandos, logs, documentos ou no Git.
+3. Crie um PostgreSQL temporário exclusivo da mesma versão, sem conexão com a aplicação e sem montar volumes de produção. No teste, o destino ficou sem rede e com dados temporários em memória.
+4. Confira o identificador do destino temporário. Restaure apenas nele, com `pg_restore --single-transaction --exit-on-error --no-owner --no-privileges`, informando explicitamente o banco temporário. Não use `--create`, para conservar o nome desse destino.
+5. Compare a lista de tabelas e as contagens exatas com uma leitura consistente da produção: `BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY`. Não exiba registros individuais. Havendo divergência, registre-a e confira o intervalo entre backup e consulta; não altere dados para fazer as contagens coincidirem.
+6. Registre data, arquivo, tamanho, SHA-256 e resultado da comparação. Remova somente o ambiente temporário identificado e suas cópias de trabalho; preserve os backups originais.
+7. Substituir a produção exige uma decisão própria do responsável e um plano de recuperação. O teste em banco temporário não autoriza essa substituição.
+
+Referências: [backups do Coolify](https://coolify.io/docs/databases/backups) e [pg_restore do PostgreSQL 16](https://www.postgresql.org/docs/16/app-pgrestore.html).
+
+**Outros bancos:** a falta de backup externo nos demais projetos permanece como pendência informada pelo responsável. Eles não foram alterados nem auditados individualmente nesta operação.
